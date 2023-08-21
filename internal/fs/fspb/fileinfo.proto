@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package fspb;
+
+option go_package = "cloudborad/internal/fs/fspb";
+
+import "google/protobuf/timestamp.proto";
+
+message DirInfo {
+    string dir_name = 1;
+}
+
+message FileInfo {
+    string file_name = 1;
+    string hash = 2;
+    string base_path = 3;
+    int64 size = 4;
+    bool is_dir = 5;
+    google.protobuf.Timestamp mod_time = 6;
+    repeated DirInfo dir_info = 7;
+}
