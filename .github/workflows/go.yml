@@ -43,5 +43,25 @@ jobs:
         username: ${{ secrets.REMOTE_SERVER_USER }} 
         port: ${{ secrets.REMOTE_SERVER_PORT }}
         key: ${{ secrets.SERVER_SSH_KEY }} 
-        source: 'cloud_board'  # 编译出的二进制文件名
+        source: 'cloud_board'
+        target: ${{ secrets.REMOTE_SERVER_PATH }}
+
+    - name: SCP Files1
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.REMOTE_SERVER_1 }}
+        username: ${{ secrets.REMOTE_SERVER_USER }} 
+        port: ${{ secrets.REMOTE_SERVER_PORT }}
+        key: ${{ secrets.SERVER_SSH_KEY }} 
+        source: 'cloud_board' 
+        target: ${{ secrets.REMOTE_SERVER_PATH }}
+
+    - name: SCP Files2
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.REMOTE_SERVER_2 }}
+        username: ${{ secrets.REMOTE_SERVER_USER }} 
+        port: ${{ secrets.REMOTE_SERVER_PORT }}
+        key: ${{ secrets.SERVER_SSH_KEY }} 
+        source: 'cloud_board'
         target: ${{ secrets.REMOTE_SERVER_PATH }}
