@@ -134,7 +134,7 @@ func (c *rpcClient) peerActionTo(ctx context.Context, target peers.PeerInfo, act
 
 func (c *rpcClient) getPeerList(ctx context.Context, pi peers.PeerInfo) ([]peers.PeerInfo, error) {
 	log.Printf("[RPC Client] GetPeerList from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr()+":"+c.port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
