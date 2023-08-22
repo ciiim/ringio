@@ -1,0 +1,4 @@
+#production configuration
+[basic]
+debug = true
+server_name = "localhost"

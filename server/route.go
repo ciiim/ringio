@@ -115,7 +115,6 @@ func (s *Server) GetDir(ctx *gin.Context) {
 	}
 	dirName, _ := ctx.GetQuery("dir")
 	file, err := s.Group.GetDir(key, base, dirName)
-	info := file.Stat().SubDir()
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
 			"msg":     err.Error(),
@@ -123,6 +122,7 @@ func (s *Server) GetDir(ctx *gin.Context) {
 			"sub":     nil,
 		})
 	} else {
+		info := file.Stat().SubDir()
 		ctx.JSON(http.StatusOK, gin.H{
 			"msg":     "success",
 			"success": errors.Is(err, nil),
