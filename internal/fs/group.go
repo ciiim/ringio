@@ -233,6 +233,8 @@ func (g *Group) Join(pi peers.PeerInfo) error {
 			return err
 		}
 	}
+
+	//get the peer list from cluster
 	return nil
 }
 

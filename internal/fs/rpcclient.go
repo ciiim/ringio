@@ -110,7 +110,7 @@ func (c *rpcClient) delete(ctx context.Context, pi peers.PeerInfo, key string) e
 func (c *rpcClient) peerActionTo(ctx context.Context, target peers.PeerInfo, action peers.PeerActionType, pis ...peers.PeerInfo) error {
 	for _, pi := range pis {
 		log.Printf("[RPC Client] PeerAction: %d to %s\n", action, pi.PAddr())
-		conn, err := grpc.Dial(pi.PAddr()+":"+c.port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Printf("[RPC Client] Dial %s error: %s", pi.PAddr(), err.Error())
 			continue
@@ -125,7 +125,7 @@ func (c *rpcClient) peerActionTo(ctx context.Context, target peers.PeerInfo, act
 		})
 		conn.Close()
 		if err != nil {
-			log.Printf("[RPC Client] PeerAction %d to %s error: %s", action, pi.PAddr(), err.Error())
+			log.Printf("[RPC Client] PeerAction %s to %s error: %s", action.String(), pi.PAddr(), err.Error())
 			continue
 		}
 	}
