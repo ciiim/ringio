@@ -98,7 +98,7 @@ func (r *rpcServer) ListPeer(ctx context.Context, empty *emptypb.Empty) (*fspb.P
 	}, nil
 }
 
-func (r *rpcServer) GetPeerAction(ctx context.Context, pi *fspb.PeerInfo) (*emptypb.Empty, error) {
+func (r *rpcServer) PeerSync(ctx context.Context, pi *fspb.PeerInfo) (*emptypb.Empty, error) {
 	if err := r.fs.Peer().PSync(DPeerInfo{
 		PeerName: pi.Name,
 		PeerAddr: pi.Addr,

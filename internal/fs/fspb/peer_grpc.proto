@@ -41,5 +41,5 @@ service PeerService {
 
     rpc ListPeer(google.protobuf.Empty) returns (PeerList) {}
 
-    rpc PeerSync(PeerInfo) returns (PeerList) {}
+    rpc PeerSync(PeerInfo) returns (google.protobuf.Empty) {}
 }
