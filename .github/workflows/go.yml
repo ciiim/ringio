@@ -24,8 +24,8 @@ jobs:
     - name: Install Protoc
       uses: arduino/setup-protoc@v2
         
-    - name: Build protobuf file
-      run: sh genprotobuf.sh
+    - name: Proto compile golang
+      run: go install github.com/golang/protobuf/protoc-gen-go/
     
     - name: Build
       run: CGO_ENABLED=0 go build -o cloud_board
