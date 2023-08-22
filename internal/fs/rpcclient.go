@@ -32,7 +32,7 @@ func newRpcClient(port string) *rpcClient {
 
 func (c *rpcClient) get(ctx context.Context, pi peers.PeerInfo, key string) (File, error) {
 	log.Printf("[RPC Client] Get from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr()+":"+c.port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (c *rpcClient) get(ctx context.Context, pi peers.PeerInfo, key string) (Fil
 
 func (c *rpcClient) put(ctx context.Context, pi peers.PeerInfo, key string, filename string, value []byte) error {
 	log.Printf("[RPC Client] Put to %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr()+":"+c.port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (c *rpcClient) put(ctx context.Context, pi peers.PeerInfo, key string, file
 
 func (c *rpcClient) delete(ctx context.Context, pi peers.PeerInfo, key string) error {
 	log.Printf("[RPC Client] Delete file in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr()+":"+c.port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
