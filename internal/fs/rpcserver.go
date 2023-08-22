@@ -30,7 +30,7 @@ func newRpcServer(fs DistributeFileSystem) *rpcServer {
 func (r *rpcServer) Get(ctx context.Context, key *fspb.Key) (*fspb.GetResponse, error) {
 	file, err := r.fs.Get(key.Key)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	fi := file.Stat()
 

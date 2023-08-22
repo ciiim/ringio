@@ -2,7 +2,6 @@ package peers
 
 import (
 	"hash/crc32"
-	"log"
 	"sort"
 	"strconv"
 	"sync"
@@ -96,7 +95,6 @@ func (m *CMap) Get(key string) PeerInfo {
 }
 
 func (m *CMap) addRealNode(info PeerInfo) {
-	log.Println("[CMap] add real node:", info.PName())
 	m.realPeerInfos = append(m.realPeerInfos, info)
 }
 

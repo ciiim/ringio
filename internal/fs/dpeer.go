@@ -51,8 +51,13 @@ func (p DPeer) Get(pi peers.PeerInfo, key string) peers.PeerResult {
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	file, err := client.get(ctx, pi, key)
+	if err != nil {
+		return peers.PeerResult{
+			Err: err,
+		}
+	}
 	return peers.PeerResult{
-		Err:  err,
+		Err:  nil,
 		Data: file.Data(),
 		Info: file.Stat(),
 		Pi:   file.Stat().PeerInfo(),
