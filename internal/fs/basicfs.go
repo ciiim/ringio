@@ -4,7 +4,6 @@ package fs
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"time"
@@ -391,7 +390,7 @@ func (bfi BasicFileInfo) Mode() os.FileMode {
 	return 0
 }
 
-func (BasicFileInfo) SubDir() []fs.DirEntry {
+func (BasicFileInfo) SubDir() []SubInfo {
 	return nil
 }
 

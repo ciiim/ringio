@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+const (
+	SPACE_DEFAULT_CAP = 1024 * 1024 * 100 // 100MB
+)
+
 type DirEntry = fs.DirEntry
 
 type treeFS struct {
@@ -26,7 +30,7 @@ type TreeFile struct {
 
 type TreeFileInfo struct {
 	BasicFileInfo
-	subDir []fs.DirEntry
+	subDir []SubInfo
 }
 
 var _ FileInfo = (*TreeFileInfo)(nil)
@@ -128,12 +132,8 @@ func (tf TreeFile) Stat() FileInfo {
 	return tf.info
 }
 
-func (tfi TreeFileInfo) SubDir() []fs.DirEntry {
+func (tfi TreeFileInfo) SubDir() []SubInfo {
 	if tfi.IsDir() {
-		if tfi.subDir == nil {
-			dirs, _ := os.ReadDir(tfi.Path_ + "/" + tfi.FileName)
-			return dirs
-		}
 		return tfi.subDir
 	}
 	return nil

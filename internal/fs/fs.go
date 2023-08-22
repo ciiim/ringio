@@ -2,7 +2,6 @@ package fs
 
 import (
 	"errors"
-	"io/fs"
 	"time"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
@@ -52,7 +51,7 @@ type FileInfo interface {
 
 	PeerInfo() peers.PeerInfo
 
-	SubDir() []fs.DirEntry
+	SubDir() []SubInfo
 }
 
 type Byte = int64
@@ -74,12 +73,13 @@ func pbFileInfoToTreeFileInfo(pb *pb.FileInfo) TreeFileInfo {
 	if pb == nil {
 		return TreeFileInfo{}
 	}
-	var subDir []fs.DirEntry
-	if pb.IsDir {
-		subDir = make([]fs.DirEntry, 0, len(pb.DirInfo))
-		for _, v := range pb.DirInfo {
-			subDir = append(subDir, Dir{v.GetDirName()})
-		}
+	var subDir []SubInfo
+	for _, v := range pb.DirInfo {
+		subDir = append(subDir, SubInfo{
+			Name:    v.Name,
+			IsDir:   v.IsDir,
+			ModTime: v.ModTime.AsTime(),
+		})
 	}
 	return TreeFileInfo{
 		BasicFileInfo: pBFileInfoToBasicFileInfo(pb),

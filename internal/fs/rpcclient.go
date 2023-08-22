@@ -51,9 +51,9 @@ func (c *rpcClient) get(ctx context.Context, pi peers.PeerInfo, key string) (Fil
 			info: DTreeFileInfo{
 				TreeFileInfo: tfi,
 				DPeerInfo: DPeerInfo{
-					name: resp.PeerInfo.Name,
-					addr: resp.PeerInfo.Addr,
-					stat: peers.PeerStatType(resp.PeerInfo.Stat),
+					PeerName: resp.PeerInfo.Name,
+					PeerAddr: resp.PeerInfo.Addr,
+					PeerStat: peers.PeerStatType(resp.PeerInfo.Stat),
 				},
 			},
 		}, nil
@@ -64,9 +64,9 @@ func (c *rpcClient) get(ctx context.Context, pi peers.PeerInfo, key string) (Fil
 			info: DistributeFileInfo{
 				BasicFileInfo: bfi,
 				DPeerInfo: DPeerInfo{
-					name: resp.PeerInfo.Name,
-					addr: resp.PeerInfo.Addr,
-					stat: peers.PeerStatType(resp.PeerInfo.Stat),
+					PeerName: resp.PeerInfo.Name,
+					PeerAddr: resp.PeerInfo.Addr,
+					PeerStat: peers.PeerStatType(resp.PeerInfo.Stat),
 				},
 			},
 		}, nil

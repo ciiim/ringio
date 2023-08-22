@@ -52,15 +52,15 @@ func TestListDir(t *testing.T) {
 	}
 	fmt.Printf("info.Name(): %v\n", info.Name())
 	for _, dir := range dirs {
-		size, err := space.GetSize(filepath.Join(info.Name(), dir.Name()))
+		size, err := space.GetSize(filepath.Join(info.Name(), dir.Name))
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		if dir.IsDir() {
-			t.Logf("[DIR ]%s --%d--", dir.Name(), size)
+		if dir.IsDir {
+			t.Logf("[DIR ]%s --%d--", dir.Name, size)
 		} else {
-			t.Logf("[FILE]%s --%d--", dir.Name(), size)
+			t.Logf("[FILE]%s --%d--", dir.Name, size)
 		}
 	}
 }
@@ -109,7 +109,7 @@ func TestDelDir(t *testing.T) {
 		return
 	}
 	for _, dir := range dirs {
-		t.Logf("isdir:%v name:%s", dir.IsDir(), dir.Name())
+		t.Logf("isdir:%v name:%s", dir.IsDir, dir.Name)
 	}
 	err = space.Delete("aaa/ccc")
 	if err != nil {

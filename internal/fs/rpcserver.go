@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // RPC Server Port : 9632
@@ -33,13 +34,17 @@ func (r *rpcServer) Get(ctx context.Context, key *fspb.Key) (*fspb.GetResponse, 
 	}
 	fi := file.Stat()
 
-	//convert subdir to pb.DirInfo
-	var pbSubDir []*fspb.DirInfo
+	//convert subdir to pb.SubInfo
+	var pbSubDir []*fspb.SubInfo
 	if fi.IsDir() {
-		pbSubDir = make([]*fspb.DirInfo, 0, len(fi.SubDir()))
+		pbSubDir = make([]*fspb.SubInfo, 0, len(fi.SubDir()))
 		for _, v := range fi.SubDir() {
-			pbSubDir = append(pbSubDir, &fspb.DirInfo{
-				DirName: v.Name(),
+			pbSubDir = append(pbSubDir, &fspb.SubInfo{
+				Name:  v.Name,
+				IsDir: v.IsDir,
+				ModTime: &timestamppb.Timestamp{
+					Seconds: v.ModTime.Unix(),
+				},
 			})
 		}
 	}
@@ -95,9 +100,9 @@ func (r *rpcServer) ListPeer(ctx context.Context, empty *emptypb.Empty) (*fspb.P
 
 func (r *rpcServer) GetPeerAction(ctx context.Context, pi *fspb.PeerInfo) (*emptypb.Empty, error) {
 	if err := r.fs.Peer().PSync(DPeerInfo{
-		name: pi.Name,
-		addr: pi.Addr,
-		stat: peers.PeerStatType(pi.Stat),
+		PeerName: pi.Name,
+		PeerAddr: pi.Addr,
+		PeerStat: peers.PeerStatType(pi.Stat),
 	}, peers.PeerActionType(pi.GetAction())); err != nil {
 		return &emptypb.Empty{}, err
 	}

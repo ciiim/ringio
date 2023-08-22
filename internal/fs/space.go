@@ -30,6 +30,8 @@ type Space struct {
 func (s *Space) Store(fullpath string, data []byte) (err error) {
 	sep := strings.Split(fullpath, "/")
 	if strings.Contains(sep[len(sep)-1], DIR_PERFIX) {
+		sep[len(sep)-1] = strings.TrimLeft(sep[len(sep)-1], DIR_PERFIX)
+		fullpath = strings.Join(sep, "/")
 		err = s.MkDir(fullpath)
 	} else {
 		err = s.storeFile(fullpath, data, os.O_CREATE|os.O_WRONLY)
@@ -51,7 +53,7 @@ func (s *Space) Get(fullpath string) (File, error) {
 			data: nil,
 			info: TreeFileInfo{
 				NewFileInfo(stat.Name(), "", fullpath, stat.Size(), true, stat.ModTime()),
-				subDir,
+				DirEntryToSubList(subDir),
 			},
 		}, nil
 	} else {

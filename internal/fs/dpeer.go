@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
@@ -15,16 +16,16 @@ type DPeer struct {
 var _ peers.Peer = (*DPeer)(nil)
 
 type DPeerInfo struct {
-	name string
-	addr string //include port e.g. 10.10.1.5:9631
-	stat peers.PeerStatType
+	PeerName string             `json:"peer_name"`
+	PeerAddr string             `json:"peer_addr"` //include port e.g. 10.10.1.5:9631
+	PeerStat peers.PeerStatType `json:"peer_stat"`
 }
 
 func NewDPeerInfo(name, addr string) DPeerInfo {
 	return DPeerInfo{
-		name: name,
-		addr: addr,
-		stat: peers.P_STAT_ONLINE,
+		PeerName: name,
+		PeerAddr: addr,
+		PeerStat: peers.P_STAT_ONLINE,
 	}
 }
 
@@ -32,9 +33,9 @@ var _ peers.PeerInfo = (*DPeerInfo)(nil)
 
 func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
 	info := DPeerInfo{
-		name: name,
-		addr: addr,
-		stat: peers.P_STAT_ONLINE,
+		PeerName: name,
+		PeerAddr: addr,
+		PeerStat: peers.P_STAT_ONLINE,
 	}
 	p := &DPeer{
 		info:    info,
@@ -79,11 +80,11 @@ func (p DPeer) Delete(pi peers.PeerInfo, key string) peers.PeerResult {
 }
 
 func (p DPeer) PName() string {
-	return p.info.name
+	return p.info.PeerName
 }
 
 func (p DPeer) PAddr() string {
-	return p.info.addr
+	return p.info.PeerAddr
 }
 
 func (p DPeer) Pick(key string) peers.PeerInfo {
@@ -103,6 +104,10 @@ recieve peer action from other peer
 source peer - pi_in
 */
 func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
+	if pi_in.Equal(p.info) {
+		log.Println("[Peer] Cannot Delete myself")
+		return nil
+	}
 	var err error
 	switch action {
 	case peers.P_ACTION_JOIN:
@@ -134,7 +139,7 @@ func (p DPeer) PActionTo(action peers.PeerActionType, pi_to ...peers.PeerInfo) e
 	return client.peerActionTo(ctx, p.info, action, pi_to...)
 }
 
-func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) peers.PeerInfoList {
+func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) []peers.PeerInfo {
 	client := newRpcClient(p.info.Port())
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
@@ -142,7 +147,7 @@ func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) peers.PeerInfoList {
 	if err != nil {
 		return nil
 	}
-	peerList := make(peers.PeerInfoList, 0, len(list))
+	peerList := make([]peers.PeerInfo, 0, len(list))
 	for _, v := range list {
 		peerList = append(peerList, NewDPeerInfo(v.PName(), v.PAddr()))
 	}
@@ -153,7 +158,7 @@ func (p DPeer) PNext(key string) peers.PeerInfo {
 	return p.hashMap.GetPeerNext(key, 1)
 }
 
-func (p DPeer) PList() peers.PeerInfoList {
+func (p DPeer) PList() []peers.PeerInfo {
 	return p.hashMap.List()
 }
 
@@ -163,23 +168,23 @@ func (p DPeer) Info() peers.PeerInfo {
 
 func (pi DPeerInfo) Equal(other peers.PeerInfo) bool {
 	o := other.(DPeerInfo)
-	return pi.name == o.name && pi.addr == o.addr
+	return pi.PeerName == o.PeerName && pi.PeerAddr == o.PeerAddr
 }
 
 func (pi DPeerInfo) PName() string {
-	return pi.name
+	return pi.PeerName
 }
 
 func (pi DPeerInfo) PAddr() string {
-	return pi.addr
+	return pi.PeerAddr
 }
 
 func (pi DPeerInfo) PStat() peers.PeerStatType {
-	return pi.stat
+	return pi.PeerStat
 }
 
 func (pi DPeerInfo) Port() string {
-	t := strings.Split(pi.addr, ":")
+	t := strings.Split(pi.PeerAddr, ":")
 	if len(t) != 2 {
 		return ""
 	}

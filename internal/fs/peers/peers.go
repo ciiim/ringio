@@ -38,8 +38,6 @@ type Peer interface {
 	PeerOperator
 }
 
-type PeerInfoList []PeerInfo
-
 type PeerInfo interface {
 	Equal(pi PeerInfo) bool
 	PName() string
@@ -67,7 +65,7 @@ type PeerOperator interface {
 	PNext(key string) PeerInfo
 	PSync(pi PeerInfo, action PeerActionType) error
 	PActionTo(action PeerActionType, pi_to ...PeerInfo) error
-	PList() PeerInfoList
+	PList() []PeerInfo
 }
 
 type LocalPeer struct {
@@ -76,14 +74,6 @@ type LocalPeer struct {
 type LocalPeerInfo struct {
 	name string
 	addr string
-}
-
-func (pil PeerInfoList) Readable() []string {
-	readableList := make([]string, 0, len(pil))
-	for _, peer := range pil {
-		readableList = append(readableList, peer.PName()+"@"+peer.PAddr())
-	}
-	return readableList
 }
 
 func (lp LocalPeer) PAddr() string {

@@ -102,9 +102,7 @@ func (m *CMap) addRealNode(info PeerInfo) {
 
 func (m *CMap) delRealNode(info PeerInfo) {
 	if idx := slices.Index[[]PeerInfo](m.realPeerInfos, info); idx != -1 {
-		if idx+1 < len(m.realPeerInfos) {
-			m.realPeerInfos = slices.Delete[[]PeerInfo](m.realPeerInfos, idx, idx)
-		}
+		m.realPeerInfos = slices.Delete[[]PeerInfo](m.realPeerInfos, idx, idx+1)
 	}
 }
 

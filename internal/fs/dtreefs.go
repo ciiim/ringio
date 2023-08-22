@@ -2,11 +2,14 @@ package fs
 
 import (
 	"errors"
-	"io/fs"
 	"log"
 	"strings"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
+)
+
+const (
+	NEW_SPACE = "__NEW__SPACE__"
 )
 
 // Distributed Tree File System.
@@ -23,7 +26,7 @@ type DTreeFile struct {
 type DTreeFileInfo struct {
 	TreeFileInfo
 	DPeerInfo
-	subDir []fs.DirEntry
+	subDir []SubInfo
 }
 
 // make sure DTFS implement FileSystem interface
@@ -52,6 +55,8 @@ Store a file or create a dir.
 key - sapce key.
 
 name - file or dir full path. dir should have DIR_PERFIX.
+
+if need to create a space, key and name should be the same.
 
 value - file content. dir should be nil.
 */
@@ -117,6 +122,10 @@ func (dt *DTFS) Close() (err error) {
 }
 
 func (dt *DTFS) storeLocally(spacekey string, fullpath string, data []byte) error {
+	if fullpath == NEW_SPACE {
+		_, err := dt.NewSpace(spacekey, SPACE_DEFAULT_CAP)
+		return err
+	}
 	space := dt.GetSpace(spacekey)
 	if space == nil {
 		return ErrSpaceNotFound
@@ -125,12 +134,11 @@ func (dt *DTFS) storeLocally(spacekey string, fullpath string, data []byte) erro
 }
 
 func (dt *DTFS) getLocally(key string, fullpath string) (File, error) {
-	spacekey, path := splitKey(key)
-	space := dt.GetSpace(spacekey)
+	space := dt.GetSpace(key)
 	if space == nil {
 		return nil, ErrSpaceNotFound
 	}
-	f, err := space.Get(path)
+	f, err := space.Get(fullpath)
 	if err != nil {
 		return nil, err
 	}
@@ -184,6 +192,9 @@ func (dt *DTFS) recoverFile(key string) (File, error) {
 
 func splitKey(key string) (spacekey, path string) {
 	temp := strings.SplitN(key, "/", 2)
+	if len(temp) == 1 {
+		return temp[0], ""
+	}
 	return temp[0], temp[1]
 }
 
@@ -199,7 +210,7 @@ func (dfi DTreeFileInfo) PeerInfo() peers.PeerInfo {
 	return dfi.DPeerInfo
 }
 
-func (dfi DTreeFileInfo) SubDir() []fs.DirEntry {
+func (dfi DTreeFileInfo) SubDir() []SubInfo {
 	return dfi.subDir
 }
 

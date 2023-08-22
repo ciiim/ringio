@@ -73,6 +73,12 @@ func (g *Group) Serve() {
 	g.FrontSystem.Serve()
 }
 
+//User method field
+
+func (g *Group) NewBorad(spaceKey string) error {
+	return g.FrontSystem.Store(spaceKey, NEW_SPACE, nil)
+}
+
 func (g *Group) StoreFile(spaceKey, filehash, basePath, filename string, blocksStream io.ReadCloser, blocks []Fileblock) error {
 	if blocksStream == nil {
 		return errors.New("blocksStream is nil")
@@ -126,7 +132,7 @@ func (g *Group) Mkdir(spaceKey, basePath, dirName string) error {
 	//Add DIR_PERFIX for FileSystem to Specify the dir
 	//But the real dir name that store in the front system is the dirName.
 	realDirString := filepath.Join(basePath, DIR_PERFIX+dirName)
-
+	log.Println("[Group] Mkdir:", realDirString)
 	return g.FrontSystem.Store(spaceKey, realDirString, nil)
 }
 
@@ -134,6 +140,7 @@ func (g *Group) GetDir(spaceKey, basePath, dirName string) (File, error) {
 
 	// You can see the format definition in dtreefs.go -> Get Function
 	getString := filepath.Join(spaceKey, basePath, dirName)
+	log.Printf("[Group] Get dir:%s\n", getString)
 	return g.FrontSystem.Get(getString)
 }
 
@@ -201,6 +208,12 @@ func (g *Group) DeleteBlock(blockInfo Fileblock, wg *sync.WaitGroup) error {
 	}
 	wg.Done()
 	return err
+}
+
+func (g *Group) PeerList() []DPeerInfo {
+	peers := make([]DPeerInfo, len(g.FrontSystem.Peer().PList()))
+
+	return peers
 }
 
 /*

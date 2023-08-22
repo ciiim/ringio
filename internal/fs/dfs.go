@@ -3,7 +3,6 @@ package fs
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
@@ -173,7 +172,7 @@ func (dfi DistributeFileInfo) PeerInfo() peers.PeerInfo {
 	return dfi.DPeerInfo
 }
 
-func (dfi DistributeFileInfo) SubDir() []fs.DirEntry {
+func (dfi DistributeFileInfo) SubDir() []SubInfo {
 	return dfi.BasicFileInfo.SubDir()
 }
 

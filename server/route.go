@@ -2,7 +2,9 @@ package server
 
 import (
 	"errors"
+	"net/http"
 
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/gin-gonic/gin"
 )
 
@@ -10,8 +12,9 @@ func initRoute(s *Server) *gin.Engine {
 	r := gin.Default()
 	apiGroup := r.Group("/api/v1")
 	{
-		apiGroup.GET("/space/:key/:path", s.GetDir)
-		apiGroup.PUT("/space/:key", s.NewBoard)
+		apiGroup.GET("/board", s.GetDir)
+		apiGroup.PUT("/board", s.MkDir)
+		apiGroup.PUT("/board/:key", s.NewBoard)
 
 		apiGroup.GET("/cluster", s.GetCluster)
 		apiGroup.PUT("/cluster/:name/:addr", s.JoinCluster)
@@ -26,28 +29,40 @@ func initRoute(s *Server) *gin.Engine {
 
 func (s *Server) GetCluster(ctx *gin.Context) {
 	list := s.Group.FrontSystem.Peer().PList()
-	ctx.JSON(200, gin.H{
-		"errcode":  0,
+	dpeerList := make([]fs.DPeerInfo, 0, len(list))
+	for _, peer := range list {
+		dpeerList = append(dpeerList, peer.(fs.DPeerInfo))
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"meg":      "success",
 		"success":  true,
 		"peernum":  len(list),
-		"peerlist": list.Readable(),
+		"peerlist": dpeerList,
 	})
 }
 
 func (s *Server) QuitCluster(ctx *gin.Context) {
 	s.Quit()
-	ctx.JSON(200, gin.H{
-		"errcode": 0,
+	ctx.JSON(http.StatusOK, gin.H{
+		"msg":     "success",
 		"success": true,
 	})
 }
 
 func (s *Server) JoinCluster(ctx *gin.Context) {
 	err := s.Join(ctx.Param("name"), ctx.Param("addr"))
-	ctx.JSON(200, gin.H{
-		"msg":     err,
-		"success": errors.Is(err, nil),
-	})
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     err.Error(),
+			"success": errors.Is(err, nil),
+		})
+		return
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     "success",
+			"success": errors.Is(err, nil),
+		})
+	}
 }
 
 /*
@@ -55,27 +70,64 @@ Space API
 */
 
 func (s *Server) NewBoard(ctx *gin.Context) {
-	err := s.Group.FrontSystem.Store(ctx.Param("key"), ctx.Param("key"), nil)
-	ctx.JSON(200, gin.H{
-		"msg":     err,
-		"success": errors.Is(err, nil),
-	})
+	err := s.Group.NewBorad(ctx.Param("key"))
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     err.Error(),
+			"success": errors.Is(err, nil),
+		})
+		return
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     "success",
+			"success": errors.Is(err, nil),
+		})
+	}
+
 }
 
 func (s *Server) MkDir(ctx *gin.Context) {
-	err := s.Group.FrontSystem.Store(ctx.Param("key"), ctx.Param("path"), nil)
-	ctx.JSON(200, gin.H{
-		"msg":     err,
+	key, _ := ctx.GetQuery("key")
+	base, _ := ctx.GetQuery("base")
+	if base == "root" || base == "" {
+		base = "."
+	}
+	dirName, _ := ctx.GetQuery("dir")
+	err := s.Group.Mkdir(key, base, dirName)
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     err.Error(),
+			"success": errors.Is(err, nil),
+		})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"msg":     "success",
 		"success": errors.Is(err, nil),
 	})
 }
 
 func (s *Server) GetDir(ctx *gin.Context) {
-	file, err := s.Group.FrontSystem.Get(ctx.Param("key") + ctx.Param("path"))
-	ctx.JSON(200, gin.H{
-		"msg":     err,
-		"success": errors.Is(err, nil),
-		"dir":     file.Stat().SubDir(),
-	})
+	key, _ := ctx.GetQuery("key")
+	base, _ := ctx.GetQuery("base")
+	if base == "root" {
+		base = "."
+	}
+	dirName, _ := ctx.GetQuery("dir")
+	file, err := s.Group.GetDir(key, base, dirName)
+	info := file.Stat().SubDir()
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     err.Error(),
+			"success": errors.Is(err, nil),
+			"sub":     nil,
+		})
+	} else {
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg":     "success",
+			"success": errors.Is(err, nil),
+			"sub":     info,
+		})
+	}
 
 }
