@@ -11,6 +11,21 @@ var (
 type PeerStatType int
 type PeerActionType int
 
+func (a PeerActionType) String() string {
+	switch a {
+	case P_ACTION_NONE:
+		return "none"
+	case P_ACTION_JOIN:
+		return "join"
+	case P_ACTION_NEW:
+		return "new"
+	case P_ACTION_QUIT:
+		return "quit"
+	default:
+		return "unknown"
+	}
+}
+
 const (
 	P_STAT_ONLINE PeerStatType = iota
 	P_STAT_OFFLINE

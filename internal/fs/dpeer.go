@@ -32,6 +32,7 @@ func NewDPeerInfo(name, addr string) DPeerInfo {
 var _ peers.PeerInfo = (*DPeerInfo)(nil)
 
 func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
+	dlog.debug("NewDPeer", "name: %s, addr: %s", name, addr)
 	info := DPeerInfo{
 		PeerName: name,
 		PeerAddr: addr,
@@ -47,7 +48,6 @@ func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
 
 func (p DPeer) Get(pi peers.PeerInfo, key string) peers.PeerResult {
 	client := newRpcClient(p.info.Port())
-
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	file, err := client.get(ctx, pi, key)
@@ -104,6 +104,7 @@ recieve peer action from other peer
 source peer - pi_in
 */
 func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
+	dlog.debug("PSync", "pi_in: %v, action: %s", pi_in, action.String())
 	if pi_in.Equal(p.info) {
 		log.Println("[Peer] Cannot Delete myself")
 		return nil
@@ -133,6 +134,7 @@ send peer action to other peer
 pi_to - destination peer
 */
 func (p DPeer) PActionTo(action peers.PeerActionType, pi_to ...peers.PeerInfo) error {
+	dlog.debug("PActionTo", "action: %s, pi_to: %v", action.String(), pi_to)
 	client := newRpcClient(p.info.Port())
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()

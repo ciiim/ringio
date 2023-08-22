@@ -32,6 +32,7 @@ func NewServer(groupName, serverName, addr string) *Server {
 		Group: fs.NewGroup(groupName, ffs),
 	}
 	server.Group.UseFS(sfs)
+	fs.DebugOn()
 	return server
 }
 
