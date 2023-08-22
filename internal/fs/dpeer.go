@@ -106,7 +106,7 @@ source peer - pi_in
 func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
 	dlog.debug("PSync", "pi_in: %v, action: %s", pi_in, action.String())
 	if pi_in.Equal(p.info) {
-		log.Println("[Peer] Cannot Delete myself")
+		log.Println("[Peer] Cannot Operate myself")
 		return nil
 	}
 	var err error
@@ -141,19 +141,19 @@ func (p DPeer) PActionTo(action peers.PeerActionType, pi_to ...peers.PeerInfo) e
 	return client.peerActionTo(ctx, p.info, action, pi_to...)
 }
 
-func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) []peers.PeerInfo {
+func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) ([]peers.PeerInfo, error) {
 	client := newRpcClient(p.info.Port())
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	list, err := client.getPeerList(ctx, pi)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	peerList := make([]peers.PeerInfo, 0, len(list))
 	for _, v := range list {
 		peerList = append(peerList, NewDPeerInfo(v.PName(), v.PAddr()))
 	}
-	return peerList
+	return peerList, nil
 }
 
 func (p DPeer) PNext(key string) peers.PeerInfo {

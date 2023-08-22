@@ -219,22 +219,51 @@ func (g *Group) PeerList() []DPeerInfo {
 /*
 pi - one of the peer info in the group
 */
-func (g *Group) Join(pi peers.PeerInfo) error {
+func (g *Group) Join(name, addr string) error {
 
 	//boradcast to group and get all peers of the group
 
-	err := g.FrontSystem.Peer().PSync(pi, peers.P_ACTION_JOIN)
+	frontDest := NewDPeerInfo(name, addr+":"+FRONT_PORT)
+	storeDest := NewDPeerInfo(name, addr+":"+FILE_STORE_PORT)
+
+	//Join Cluster
+	err := g.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontDest)
 	if err != nil {
 		return err
 	}
+
+	// Get List from cluster
+	peerList, err := g.FrontSystem.Peer().GetPeerListFromPeer(frontDest)
+	if err != nil {
+		return err
+	}
+
+	//Add to peer map
+	for _, peer := range peerList {
+		_ = g.FrontSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
+	}
+
+	// for each StoreSystem
 	for _, fs := range g.StoreSystems {
-		err = fs.Peer().PSync(pi, peers.P_ACTION_JOIN)
+
+		//Join Cluster
+		err = fs.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
 		if err != nil {
 			return err
 		}
+
+		// Get List from cluster
+		peerList, err = fs.Peer().GetPeerListFromPeer(storeDest)
+		if err != nil {
+			return err
+		}
+
+		//Add to peer map
+		for _, peer := range peerList {
+			_ = fs.Peer().PSync(peer, peers.P_ACTION_NEW)
+		}
 	}
 
-	//get the peer list from cluster
 	return nil
 }
 
@@ -243,6 +272,7 @@ func (g *Group) Quit() {
 	for _, fs := range g.StoreSystems {
 		fs.Peer().PSync(g.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
 	}
+
 }
 
 func (g *Group) SyncPeer(pi peers.PeerInfo, action peers.PeerActionType) error {

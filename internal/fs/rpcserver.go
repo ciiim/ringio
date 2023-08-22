@@ -114,7 +114,6 @@ func (r *rpcServer) run(port string) {
 	if err != nil {
 		return
 	}
-	log.Printf("[RPC Server] Listen: %s\n", l.Addr())
 	s := grpc.NewServer()
 	fspb.RegisterPeerServiceServer(s, r)
 	err = s.Serve(l)

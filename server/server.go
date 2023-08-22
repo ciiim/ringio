@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/ciiim/cloudborad/conf"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 
 	"github.com/ciiim/cloudborad/internal/fs"
 )
@@ -53,27 +52,16 @@ func (s *Server) StartServer() {
 }
 
 func (s *Server) Join(peerName, peerAddr string) error {
-	frontdest := fs.NewDPeerInfo(peerName, peerAddr+":"+fs.FRONT_PORT)
-	storedest := fs.NewDPeerInfo(peerName, peerAddr+":"+fs.FILE_STORE_PORT)
-	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontdest)
+	err := s.Group.Join(peerName, peerAddr)
 	if err != nil {
 		return err
-	}
-	for _, fs := range s.Group.StoreSystems {
-		err = fs.Peer().PActionTo(peers.P_ACTION_JOIN, storedest)
-		if err != nil {
-			return err
-		}
 	}
 	log.Println("[Server] Join cluster success")
 	return nil
 }
 
 func (s *Server) Quit() {
-	s.Group.FrontSystem.Peer().PSync(s.Group.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
-	for _, fs := range s.Group.StoreSystems {
-		fs.Peer().PSync(s.Group.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
-	}
+	s.Group.Quit()
 }
 
 func (s *Server) Close() error {

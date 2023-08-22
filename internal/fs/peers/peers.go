@@ -80,6 +80,7 @@ type PeerOperator interface {
 	PNext(key string) PeerInfo
 	PSync(pi PeerInfo, action PeerActionType) error
 	PActionTo(action PeerActionType, pi_to ...PeerInfo) error
+	GetPeerListFromPeer(pi PeerInfo) ([]PeerInfo, error)
 	PList() []PeerInfo
 }
 
