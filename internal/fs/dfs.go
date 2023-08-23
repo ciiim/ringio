@@ -46,7 +46,7 @@ func NewDFS(self peers.Peer, rootPath string, capacity int64, calcStorePathFn Ca
 }
 
 func (d *DFS) Get(key string) (File, error) {
-	dlog.debug("[DFS]", "Get by key:", key)
+	dlog.debug("[DFS]", "Get by key '%s'", key)
 	pi := d.PickPeer(key)
 	if pi == nil {
 		return nil, peers.ErrPeerNotFound
@@ -77,7 +77,7 @@ func (d *DFS) Get(key string) (File, error) {
 }
 
 func (d *DFS) Store(key string, filename string, value []byte) error {
-	dlog.debug("[DFS]", "Store by key:", key, " filename:", filename, " value len:", len(value))
+	dlog.debug("[DFS]", "Store by key '%s', name '%s'", key, filename)
 	pi := d.PickPeer(key)
 	if pi == nil {
 		return peers.ErrPeerNotFound

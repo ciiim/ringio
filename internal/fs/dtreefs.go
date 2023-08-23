@@ -61,7 +61,7 @@ if need to create a space, key and name should be the same.
 value - file content. dir should be nil.
 */
 func (dt *DTFS) Store(key, name string, value []byte) error {
-	dlog.debug("[DTFS]", "Store by key: ", key, " name: ", name, "value len:", len(value))
+	dlog.debug("[DTFS]", "Store by key '%s', name '%s'", key, name)
 	pi := dt.PickPeer(key)
 	if pi == nil {
 		return peers.ErrPeerNotFound
@@ -77,7 +77,7 @@ func (dt *DTFS) Store(key, name string, value []byte) error {
 // key - format: spacekey/fullpath
 func (dt *DTFS) Get(key string) (File, error) {
 	spacekey, path := splitKey(key)
-	dlog.debug("[DTFS]", "Get from space ", spacekey, " path: ", path)
+	dlog.debug("[DTFS]", "Get from space '%s', path '%s'", spacekey, path)
 	pi := dt.PickPeer(spacekey)
 	if pi == nil {
 		return nil, peers.ErrPeerNotFound
@@ -87,7 +87,7 @@ func (dt *DTFS) Get(key string) (File, error) {
 		if errors.Is(err, ErrFileNotFound) {
 			return dt.recoverFile(key)
 		} else {
-			dlog.debug("[DTFS]", "Get file ", key, " from local")
+			dlog.debug("[DTFS]", "Get File '%s' from local", key)
 			return df, err
 		}
 	}
