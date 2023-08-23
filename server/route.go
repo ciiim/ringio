@@ -9,6 +9,11 @@ import (
 )
 
 func initRoute(s *Server) *gin.Engine {
+	if fs.IsDebug() {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
 	apiGroup := r.Group("/api/v1")
 	{

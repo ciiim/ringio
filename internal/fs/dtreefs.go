@@ -75,7 +75,7 @@ func (dt *DTFS) Store(key, name string, value []byte) error {
 // key - format: spacekey/fullpath
 func (dt *DTFS) Get(key string) (File, error) {
 	spacekey, path := splitKey(key)
-	pi := dt.PickPeer(key)
+	pi := dt.PickPeer(spacekey)
 	if pi == nil {
 		return nil, peers.ErrPeerNotFound
 	}
@@ -180,7 +180,7 @@ func (dt *DTFS) recoverFile(key string) (File, error) {
 	// Get file info from next peer
 	resp := dt.self.Get(nextInfo, key)
 	if resp.Err == nil {
-		// delete the wrong local file
+		// delete the wrong location file
 		dt.self.Delete(nextInfo, key)
 		return DTreeFile{
 			data: resp.Data,
@@ -215,6 +215,6 @@ func (dfi DTreeFileInfo) SubDir() []SubInfo {
 }
 
 func (dt *DTFS) Serve() {
-	log.Println("[DTFS] Serve on ", dt.self.PAddr())
+	log.Println("[DTFS] Serve on", dt.self.PAddr())
 	newRpcServer(dt).run(FRONT_PORT)
 }

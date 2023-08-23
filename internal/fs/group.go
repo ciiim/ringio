@@ -140,7 +140,7 @@ func (g *Group) GetDir(spaceKey, basePath, dirName string) (File, error) {
 
 	// You can see the format definition in dtreefs.go -> Get Function
 	getString := filepath.Join(spaceKey, basePath, dirName)
-	log.Printf("[Group] Get dir:%s\n", getString)
+	log.Printf("[Group] Get space %s dir:%s\n", spaceKey, getString)
 	return g.FrontSystem.Get(getString)
 }
 
@@ -208,6 +208,16 @@ func (g *Group) DeleteBlock(blockInfo Fileblock, wg *sync.WaitGroup) error {
 	}
 	wg.Done()
 	return err
+}
+
+func (g *Group) AddPeer(name, addr string) {
+	if name == "" || addr == "" {
+		return
+	}
+	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, addr+":"+FRONT_PORT))
+	for _, fs := range g.StoreSystems {
+		fs.Peer().PAdd(NewDPeerInfo(name, addr+":"+FILE_STORE_PORT))
+	}
 }
 
 func (g *Group) PeerList() []DPeerInfo {

@@ -1,4 +1,0 @@
-#development configuration
-[basic]
-debug = true
-server_name = "node0"

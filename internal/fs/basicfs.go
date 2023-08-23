@@ -3,6 +3,7 @@ package fs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -80,13 +81,15 @@ func newBasicFileSystem(rootPath string, capacity int64, calcStorePathFn CalcSto
 		calcStoreFilePathFn: calcStorePathFn,
 	}
 	if calcStorePathFn == nil {
-		log.Println("[BFS] Use Default Calculate Function.")
+		dlog.debug("[BFS]", "Use Default Calculate Function.")
 		bfs.calcStoreFilePathFn = DefaultCalcStorePathFn
 	}
 
 	cap, ouppy, err := getCapAndOccupy(bfs.levelDB)
 
 	if err != nil {
+		log.Println("New File Storage System at", rootPath)
+		storeCapAndOccupy(bfs.levelDB, capacity, 0)
 		return bfs
 	}
 	log.Printf("Detect exist filesystem at %s\n", rootPath)
@@ -229,14 +232,8 @@ func (bfs *basicFileSystem) storeFile(key BasicFileInfo, value []byte) error {
 
 func (bfs *basicFileSystem) getFile(key BasicFileInfo) ([]byte, error) {
 	path := key.Path_
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("Get panic:", err)
-			path = bfs.rootPath + "/" + "default"
-		}
-	}()
 	if path == "" {
-		panic("path is empty")
+		return nil, errors.New("path is empty")
 	}
 	file, err := os.Open(path + "/" + key.FileName)
 	if err != nil {

@@ -177,6 +177,6 @@ func (dfi DistributeFileInfo) SubDir() []SubInfo {
 }
 
 func (d *DFS) Serve() {
-	log.Println("[DFS] Serve on ", d.self.PAddr())
+	log.Println("[DFS] Serve on", d.self.PAddr())
 	newRpcServer(d).run(FILE_STORE_PORT)
 }
