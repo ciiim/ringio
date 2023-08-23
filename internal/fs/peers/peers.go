@@ -64,8 +64,8 @@ type PeerInfo interface {
 type PeerResult struct {
 	Err  error
 	Data []byte
-	Pi   PeerInfo
 	Info any
+	Pi   PeerInfo
 }
 
 type PeerGetSetDeleter interface {

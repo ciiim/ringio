@@ -100,6 +100,7 @@ func (dt *DTFS) Get(key string) (File, error) {
 		data: resp.Data,
 		info: resp.Info.(DTreeFileInfo),
 	}
+	dlog.debug("[DTFS]", "Get File Info Subdir len '%s' from remote", len(df.info.subDir))
 	return df, resp.Err
 }
 

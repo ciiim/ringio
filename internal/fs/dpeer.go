@@ -56,6 +56,7 @@ func (p DPeer) Get(pi peers.PeerInfo, key string) peers.PeerResult {
 			Err: err,
 		}
 	}
+	dlog.debug("[DPeer Get]", "file subdir: %v", file.Stat().SubDir())
 	return peers.PeerResult{
 		Err:  nil,
 		Data: file.Data(),
