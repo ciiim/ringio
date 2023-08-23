@@ -10,7 +10,7 @@ func main() {
 	v := conf.InitConfig()
 	serverName := v.GetString("server.server_name")
 	debug := v.GetBool("debug")
-	port := v.GetString("server.server_port")
+	port := v.GetString("server.api_server_port")
 	nodelist := conf.GetNodes(v)
 	s := server.NewServer("test_server", serverName, ip)
 	for _, node := range nodelist {
