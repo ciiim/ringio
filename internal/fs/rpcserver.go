@@ -37,8 +37,10 @@ func (r *rpcServer) Get(ctx context.Context, key *fspb.Key) (*fspb.GetResponse, 
 	//convert subdir to pb.SubInfo
 	var pbSubDir []*fspb.SubInfo
 	if fi.IsDir() {
-		pbSubDir = make([]*fspb.SubInfo, 0, len(fi.SubDir()))
-		for _, v := range fi.SubDir() {
+		sd := fi.SubDir()
+		dlog.debug("[RPC Server]", "Get subdir len '%d' from local", len(sd))
+		pbSubDir = make([]*fspb.SubInfo, 0, len(sd))
+		for _, v := range sd {
 			pbSubDir = append(pbSubDir, &fspb.SubInfo{
 				Name:  v.Name,
 				IsDir: v.IsDir,
