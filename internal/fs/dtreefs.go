@@ -26,7 +26,6 @@ type DTreeFile struct {
 type DTreeFileInfo struct {
 	TreeFileInfo
 	DPeerInfo
-	subDir []SubInfo
 }
 
 // make sure DTFS implement FileSystem interface
@@ -213,10 +212,6 @@ func (df DTreeFile) Stat() FileInfo {
 
 func (dfi DTreeFileInfo) PeerInfo() peers.PeerInfo {
 	return dfi.DPeerInfo
-}
-
-func (dfi DTreeFileInfo) SubDir() []SubInfo {
-	return dfi.subDir
 }
 
 func (dt *DTFS) Serve() {
