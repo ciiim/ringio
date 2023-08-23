@@ -43,9 +43,10 @@ func (c *rpcClient) get(ctx context.Context, pi peers.PeerInfo, key string) (Fil
 	if err != nil {
 		return nil, err
 	}
-
+	dlog.debug("[RPC Client]", "Get resp is_dir: %v", resp.FileInfo.IsDir)
 	if resp.FileInfo.IsDir {
 		tfi := pbFileInfoToTreeFileInfo(resp.FileInfo)
+		dlog.debug("[RPC Client] Get", "file subdir: %v", tfi.SubDir())
 		return DTreeFile{
 			data: resp.Data,
 			info: DTreeFileInfo{
