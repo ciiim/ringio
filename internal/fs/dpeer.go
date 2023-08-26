@@ -46,44 +46,6 @@ func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
 	return p
 }
 
-func (p DPeer) Get(pi peers.PeerInfo, key string) peers.PeerResult {
-	client := newRpcClient(p.info.Port())
-	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
-	defer cancel()
-	file, err := client.get(ctx, pi, key)
-	if err != nil {
-		return peers.PeerResult{
-			Err: err,
-		}
-	}
-	return peers.PeerResult{
-		Err:  nil,
-		Data: file.Data(),
-		Info: file.Stat(),
-		Pi:   file.Stat().PeerInfo(),
-	}
-}
-
-func (p DPeer) Put(pi peers.PeerInfo, key string, filename string, value []byte) peers.PeerResult {
-	res := peers.PeerResult{}
-	client := newRpcClient(p.info.Port())
-
-	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
-	defer cancel()
-	res.Err = client.put(ctx, pi, key, filename, value)
-	return res
-}
-
-func (p DPeer) Delete(pi peers.PeerInfo, key string) peers.PeerResult {
-	res := peers.PeerResult{}
-	client := newRpcClient(p.info.Port())
-
-	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
-	defer cancel()
-	res.Err = client.delete(ctx, pi, key)
-	return res
-}
-
 func (p DPeer) PName() string {
 	return p.info.PeerName
 }
@@ -118,7 +80,7 @@ func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
 	switch action {
 	case peers.P_ACTION_JOIN:
 		// notify other peers - action P_ACTION_NEW
-		client := newRpcClient(pi_in.Port())
+		client := newRPCPeerClient()
 		ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 		defer cancel()
 		list := p.PList()
@@ -140,14 +102,14 @@ pi_to - destination peer
 */
 func (p DPeer) PActionTo(action peers.PeerActionType, pi_to ...peers.PeerInfo) error {
 	dlog.debug("PActionTo", "action: %s, pi_to: %v", action.String(), pi_to)
-	client := newRpcClient(p.info.Port())
+	client := newRPCPeerClient()
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	return client.peerActionTo(ctx, p.info, action, pi_to...)
 }
 
 func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) ([]peers.PeerInfo, error) {
-	client := newRpcClient(p.info.Port())
+	client := newRPCPeerClient()
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	list, err := client.getPeerList(ctx, pi)
@@ -196,4 +158,12 @@ func (pi DPeerInfo) Port() string {
 		return ""
 	}
 	return t[len(t)-1]
+}
+
+func PeerInfoListToDpeerInfoList(list []peers.PeerInfo) []DPeerInfo {
+	dpeerList := make([]DPeerInfo, 0, len(list))
+	for _, v := range list {
+		dpeerList = append(dpeerList, v.(DPeerInfo))
+	}
+	return dpeerList
 }

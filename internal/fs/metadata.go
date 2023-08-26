@@ -10,57 +10,60 @@ const (
 )
 
 type Metadata struct {
-	Filename string      `json:"filename"`
-	Hash     string      `json:"hash"`
-	Size     int64       `json:"size"`
-	ModTime  time.Time   `json:"mod_time"`
-	Blocks   []Fileblock `json:"blocks"`
+	Hash     string      `json:"file_meta_hash"`
+	Filename string      `json:"file_name"`
+	Size     int64       `json:"file_size"`
+	ModTime  time.Time   `json:"file_mod_time"`
+	Blocks   []Fileblock `json:"block_list"`
 }
 
 type Fileblock struct {
 
 	// Begin from 0
-	BlockID int64 `json:"blockid"`
+	BlockID int64 `json:"block_id"`
 
-	/*
-	 format: <hostip>@<block_path>
-
-	 block_path : <block_dir>/<block_name>
-	*/
-	FullPath string `json:"fullpath"`
-	Size     int64  `json:"size"`
-	Hash     string `json:"hash"`
+	Host string `json:"block_host"`
+	Hash string `json:"block_hash"`
+	Size int64  `json:"block_size"`
 }
 
-func newMetaData(filename string, hash string, size int64, modTime time.Time, blocks []Fileblock) Metadata {
-	return Metadata{
+func newMetaData(filename string, hash string, modTime time.Time, blocks []Fileblock) Metadata {
+	m := Metadata{
 		Filename: filename,
 		Hash:     hash,
-		Size:     size,
 		ModTime:  modTime,
 		Blocks:   blocks,
 	}
+	var size int64
+	blockID := int64(0)
+	for i := 0; i < len(blocks); i++ {
+		blocks[i].BlockID = blockID
+		blockID++
+		size += blocks[i].Size
+	}
+	m.Size = size
+	return m
 }
 
-func newFileBlock(fullPath string, size int64, hash string) Fileblock {
+func newFileBlock(host string, size int64, hash string) Fileblock {
 	return Fileblock{
-		FullPath: fullPath,
-		Size:     size,
-		Hash:     hash,
+		Host: host,
+		Size: size,
+		Hash: hash,
 	}
 }
 
-func readMetaDataByBytes(data []byte, metadata *Metadata) error {
+func unmarshalMetaData(data []byte, metadata *Metadata) error {
 	if err := json.Unmarshal(data, metadata); err != nil {
 		return err
 	}
 	return nil
 }
 
-func marshalMetaData(meta Metadata) []byte {
+func marshalMetaData(meta *Metadata) ([]byte, error) {
 	data, err := json.Marshal(meta)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return data
+	return data, nil
 }

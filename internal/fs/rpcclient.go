@@ -15,99 +15,43 @@ import (
 )
 
 const (
-	FRONT_PORT      = "9631"
-	FILE_STORE_PORT = "9632"
-	_RPC_TIMEOUT    = time.Second * 5
+	RPC_TDFS_PORT = "9631"
+	RPC_HDFS_PORT = "9632"
+	_RPC_TIMEOUT  = time.Second * 5
 )
 
-type rpcClient struct {
-	port string
+type rpcHashClient struct {
 }
 
-func newRpcClient(port string) *rpcClient {
-	return &rpcClient{
-		port: port,
-	}
+type rpcTreeClient struct {
 }
 
-func (c *rpcClient) get(ctx context.Context, pi peers.PeerInfo, key string) (File, error) {
-	log.Printf("[RPC Client] Get from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	client := fspb.NewPeerServiceClient(conn)
-	resp, err := client.Get(ctx, &fspb.Key{Key: key})
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.FileInfo.IsDir {
-		tfi := pbFileInfoToTreeFileInfo(resp.FileInfo)
-		return DTreeFile{
-			data: resp.Data,
-			info: DTreeFileInfo{
-				TreeFileInfo: tfi,
-				DPeerInfo: DPeerInfo{
-					PeerName: resp.PeerInfo.Name,
-					PeerAddr: resp.PeerInfo.Addr,
-					PeerStat: peers.PeerStatType(resp.PeerInfo.Stat),
-				},
-			},
-		}, nil
-	} else {
-		bfi := pBFileInfoToBasicFileInfo(resp.FileInfo)
-		return DistributeFile{
-			data: resp.Data,
-			info: DistributeFileInfo{
-				BasicFileInfo: bfi,
-				DPeerInfo: DPeerInfo{
-					PeerName: resp.PeerInfo.Name,
-					PeerAddr: resp.PeerInfo.Addr,
-					PeerStat: peers.PeerStatType(resp.PeerInfo.Stat),
-				},
-			},
-		}, nil
-	}
-
+type rpcPeerClient struct {
 }
 
-func (c *rpcClient) put(ctx context.Context, pi peers.PeerInfo, key string, filename string, value []byte) error {
-	log.Printf("[RPC Client] Put to %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client := fspb.NewPeerServiceClient(conn)
-
-	_, err = client.Put(ctx, &fspb.PutRequest{Key: &fspb.Key{Key: key}, Filename: filename, Value: value})
-	if err != nil {
-		return err
-	}
-	return nil
+func newRPCHashClient() *rpcHashClient {
+	return &rpcHashClient{}
 }
 
-func (c *rpcClient) delete(ctx context.Context, pi peers.PeerInfo, key string) error {
-	log.Printf("[RPC Client] Delete file in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client := fspb.NewPeerServiceClient(conn)
-	_, err = client.Delete(ctx, &fspb.Key{Key: key})
-	if err != nil {
-		return err
-	}
-	return nil
+func newRPCPeerClient() *rpcPeerClient {
+	return &rpcPeerClient{}
 }
 
-func (c *rpcClient) peerActionTo(ctx context.Context, target peers.PeerInfo, action peers.PeerActionType, pis ...peers.PeerInfo) error {
+func newRPCTreeClient() *rpcTreeClient {
+	return &rpcTreeClient{}
+}
+
+func ctxWithTimeout() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), _RPC_TIMEOUT)
+}
+
+/*
+
+Peer Method Start
+
+*/
+
+func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo, action peers.PeerActionType, pis ...peers.PeerInfo) error {
 	for _, pi := range pis {
 		log.Printf("[RPC Client] PeerAction: %s to %s\n", action.String(), pi.PAddr())
 		conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -132,7 +76,7 @@ func (c *rpcClient) peerActionTo(ctx context.Context, target peers.PeerInfo, act
 	return nil
 }
 
-func (c *rpcClient) getPeerList(ctx context.Context, pi peers.PeerInfo) ([]peers.PeerInfo, error) {
+func (c *rpcPeerClient) getPeerList(ctx context.Context, pi peers.PeerInfo) ([]peers.PeerInfo, error) {
 	log.Printf("[RPC Client] GetPeerList from %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -151,3 +95,277 @@ func (c *rpcClient) getPeerList(ctx context.Context, pi peers.PeerInfo) ([]peers
 	}
 	return pis, nil
 }
+
+/*
+
+Peer Method End
+
+*/
+
+/*
+
+rpcHashClient Method Start
+
+*/
+
+func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) (HashDFile, error) {
+	log.Printf("[RPC Client] Get from %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return HashDFile{}, err
+	}
+	defer conn.Close()
+
+	client := fspb.NewHashFileSystemServiceClient(conn)
+	resp, err := client.Get(ctx, &fspb.Key{Key: key})
+	if err != nil {
+		return HashDFile{}, err
+	}
+	hfi := pBFileInfoToHashFileInfo(resp.FileInfo)
+	return HashDFile{
+		data: resp.Data,
+		info: HashDFileInfo{
+			HashFileInfo: hfi,
+			DPeerInfo: DPeerInfo{
+				PeerName: resp.PeerInfo.Name,
+				PeerAddr: resp.PeerInfo.Addr,
+				PeerStat: peers.PeerStatType(resp.PeerInfo.Stat),
+			},
+		},
+	}, nil
+}
+
+func (c *rpcHashClient) put(ctx context.Context, pi peers.PeerInfo, key string, filename string, value []byte) error {
+	log.Printf("[RPC Client] Put to %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewHashFileSystemServiceClient(conn)
+
+	_, err = client.Put(ctx, &fspb.PutRequest{Key: &fspb.Key{Key: key}, Filename: filename, Value: value})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *rpcHashClient) delete(ctx context.Context, pi peers.PeerInfo, key string) error {
+	log.Printf("[RPC Client] Delete file in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewHashFileSystemServiceClient(conn)
+	_, err = client.Delete(ctx, &fspb.Key{Key: key})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+/*
+
+rpcHashClient Method End
+
+*/
+
+/*
+
+newRPCTreeClient Method Start
+
+*/
+
+func (r *rpcTreeClient) getMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string) ([]byte, error) {
+	log.Printf("[RPC Client] GetMetadata from %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	resp, err := client.GetMetadata(ctx, &fspb.TreeFileSystemBasicRequest{
+		Space: space,
+		Base:  base,
+		Name:  name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (r *rpcTreeClient) putMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string, data []byte) (string, error) {
+	log.Printf("[RPC Client] PutMetadata to %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	resp, err := client.PutMetadata(ctx, &fspb.PutMetadataRequest{
+		Src: &fspb.TreeFileSystemBasicRequest{
+			Space: space,
+			Base:  base,
+			Name:  name,
+		},
+		Metadata: data,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Path, nil
+}
+
+func (r *rpcTreeClient) deleteMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string) error {
+	log.Printf("[RPC Client] DeleteMetadata in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	_, err = client.DeleteMetadata(ctx, &fspb.TreeFileSystemBasicRequest{
+		Space: space,
+		Base:  base,
+		Name:  name,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *rpcTreeClient) makeDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) error {
+	log.Printf("[RPC Client] MakeDir in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	_, err = client.MakeDir(ctx, &fspb.TreeFileSystemBasicRequest{
+		Space: space,
+		Base:  base,
+		Name:  dir,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *rpcTreeClient) renameDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string, newName string) error {
+	log.Printf("[RPC Client] RenameDir in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	_, err = client.RenameDir(ctx, &fspb.RenameDirRequest{
+		Src: &fspb.TreeFileSystemBasicRequest{
+			Space: space,
+			Base:  base,
+			Name:  dir,
+		},
+		NewName: newName,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *rpcTreeClient) deleteDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) error {
+	log.Printf("[RPC Client] DeleteDir in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	_, err = client.DeleteDir(ctx, &fspb.TreeFileSystemBasicRequest{
+		Space: space,
+		Base:  base,
+		Name:  dir,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) ([]SubInfo, error) {
+	log.Printf("[RPC Client] GetDirSub from %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	resp, err := client.GetDirSub(ctx, &fspb.TreeFileSystemBasicRequest{
+		Space: space,
+		Base:  base,
+		Name:  dir,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return pbSubsToSubs(resp.SubInfo), nil
+}
+
+func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space string, cap Byte) error {
+	log.Printf("[RPC Client] NewSpace in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	_, err = client.NewSpace(ctx, &fspb.NewSpaceRequest{
+		Space: space,
+		Cap:   int64(cap),
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *rpcTreeClient) deleteSpace(ctx context.Context, pi peers.PeerInfo, space string) error {
+	log.Printf("[RPC Client] DeleteSpace in %s", pi.PAddr())
+	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := fspb.NewTreeFileSystemServiceClient(conn)
+	_, err = client.DeleteSpace(ctx, &fspb.SpaceRequest{
+		Space: space,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+/*
+
+newRPCTreeClient Method End
+
+*/

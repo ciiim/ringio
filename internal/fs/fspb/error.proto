@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package fspb;
+
+option go_package = "cloudborad/internal/fs/fspb";
+
+message Error {
+    string err = 1;
+}

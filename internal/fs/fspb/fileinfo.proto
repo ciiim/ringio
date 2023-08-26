@@ -15,12 +15,23 @@ message SubInfo {
     
 }
 
-message FileInfo {
+message Subs {
+    repeated SubInfo sub_info = 1;
+}
+
+message HashFileInfo {
     string file_name = 1;
     string hash = 2;
     string base_path = 3;
     int64 size = 4;
-    bool is_dir = 5;
     google.protobuf.Timestamp mod_time = 6;
-    repeated SubInfo dir_info = 7;
+}
+
+message TreeFileInfo {
+    string file_name = 1;
+    string base_path = 2;
+    bool is_dir = 3;
+    int64 size = 4;
+    google.protobuf.Timestamp mod_time = 5;
+    Subs sub_files = 6;
 }

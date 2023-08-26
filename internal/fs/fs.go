@@ -2,11 +2,8 @@ package fs
 
 import (
 	"errors"
-	"time"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
-
-	pb "github.com/ciiim/cloudborad/internal/fs/fspb"
 )
 
 var (
@@ -15,74 +12,44 @@ var (
 	ErrFileExist       = errors.New("file or dir already exist")
 	ErrFileInvalidName = errors.New("invalid file name")
 	ErrNotDir          = errors.New("not a directory")
+	ErrIsDir           = errors.New("is a directory")
 	ErrInternal        = errors.New("internal error")
 )
 
-type FileSystem interface {
+type HashFileSystemI interface {
 	Store(key, name string, value []byte) error
-
-	Get(key string) (File, error)
-
+	Get(key string) (HashFileI, error)
 	Delete(key string) error
-
-	Set(opt any) error
-
+	Cap() int64
+	Occupied(unit ...string) float64
 	Close() error
 }
 
-type DistributeFileSystem interface {
-	FileSystem
+type HashDFileSystemI interface {
+	HashFileSystemI
 	Serve()
 	Peer() peers.Peer
 }
 
-type File interface {
-	Data() []byte
-	Stat() FileInfo
+type TreeFileSystemI interface {
+	NewSpace(space string, cap Byte) error
+	GetSpace(space string) *Space
+	DeleteSpace(space string) error
+	Close() error
 }
 
-type FileInfo interface {
-	Name() string
-	Path() string //base path
-	Hash() string //file's hash
-	Size() int64
-	ModTime() time.Time
-	IsDir() bool
+type TreeDFileSystemI interface {
+	TreeFileSystemI
 
-	PeerInfo() peers.PeerInfo
+	MakeDir(space, base, name string) error
+	RenameDir(space, base, name, newName string) error
+	DeleteDir(space, base, name string) error
+	GetDirSub(space, base, name string) ([]SubInfo, error)
 
-	SubDir() []SubInfo
-}
+	GetMetadata(space, base, name string) ([]byte, error)
+	PutMetadata(space, base, name, hash string, data []byte) (string, error)
+	DeleteMetadata(space, base, name string) error
 
-type Byte = int64
-
-func pBFileInfoToBasicFileInfo(pb *pb.FileInfo) BasicFileInfo {
-	if pb == nil {
-		return BasicFileInfo{}
-	}
-	return BasicFileInfo{
-		Path_:    pb.BasePath,
-		FileName: pb.FileName,
-		Hash_:    pb.Hash,
-		Size_:    pb.Size,
-		Dir_:     pb.IsDir,
-	}
-}
-
-func pbFileInfoToTreeFileInfo(pb *pb.FileInfo) TreeFileInfo {
-	if pb == nil {
-		return TreeFileInfo{}
-	}
-	var subDir []SubInfo
-	for _, v := range pb.DirInfo {
-		subDir = append(subDir, SubInfo{
-			Name:    v.Name,
-			IsDir:   v.IsDir,
-			ModTime: v.ModTime.AsTime(),
-		})
-	}
-	return TreeFileInfo{
-		BasicFileInfo: pBFileInfoToBasicFileInfo(pb),
-		subDir:        subDir,
-	}
+	Serve()
+	Peer() peers.Peer
 }

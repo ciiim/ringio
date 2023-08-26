@@ -8,16 +8,25 @@ import (
 func main() {
 	ip := server.GetIP()
 	v := conf.InitConfig()
-	serverName := v.GetString("server.server_name")
+
 	debug := v.GetBool("debug")
+
+	serverName := v.GetString("server.file_server_name")
+
 	port := v.GetString("server.api_server_port")
+	apiEnable := v.GetBool("server.api_server_enable")
+
 	nodelist := conf.GetNodes(v)
-	s := server.NewServer("test_server", serverName, ip)
+
+	s := server.NewServer("group", serverName, ip)
+
 	for _, node := range nodelist {
 		s.AddPeer(node["name"], node["addr"])
 	}
+
 	if debug {
 		s.DebugOn()
 	}
-	s.StartServer(port)
+
+	s.StartServer(port, apiEnable)
 }

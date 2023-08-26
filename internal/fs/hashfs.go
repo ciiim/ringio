@@ -1,4 +1,4 @@
-// implement basic file system
+// implement hash file system
 package fs
 
 import (
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ciiim/cloudborad/internal/database"
@@ -15,41 +16,40 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-type basicFileSystem struct {
+type hashFileSystem struct {
 	rootPath string //相对路径 relative path
 	capacity Byte
-	occupy   Byte
+	occupied Byte
 
 	fileInfoDBName string
 
-	levelDB *leveldb.DB //concurrent safe
+	levelDB *leveldb.DB
 
 	calcStoreFilePathFn CalcStoreFilePathFnType
 
 	HashFn Hash
 }
 
-type CalcStoreFilePathFnType = func(fileinfo BasicFileInfo) string
+type CalcStoreFilePathFnType = func(fileinfo HashFileInfo) string
 
 type Hash func([]byte) string
 
-type BasicFile struct {
+type HashFile struct {
 	data []byte
-	info BasicFileInfo
+	info HashFileInfo
 }
 
-type BasicFileInfo struct {
+type HashFileInfo struct {
 	FileName string    `json:"fileName"`
 	Hash_    string    `json:"hash"`
 	Path_    string    `json:"path"`
 	Size_    int64     `json:"size"`
-	Dir_     bool      `json:"dir"`
 	ModTime_ time.Time `json:"modTime"`
 }
 
 // default calculate store path function
 // format: year/month/day/filehash[0:3]/filehash[3:6]
-var DefaultCalcStorePathFn = func(bfi BasicFileInfo) string {
+var DefaultCalcStorePathFn = func(bfi HashFileInfo) string {
 	path := ""
 	timePath := time.Time.Format(time.Now(), "2006/01/02")
 	path = fmt.Sprintf("%s/%s/%s", timePath, bfi.Hash_[0:3], bfi.Hash_[3:6])
@@ -60,20 +60,20 @@ var DefaultHashFn Hash = func(b []byte) string {
 	return fmt.Sprintf("%x", b)
 }
 
-var _ FileSystem = (*basicFileSystem)(nil)
-var _ FileInfo = (*BasicFileInfo)(nil)
+var _ HashFileSystemI = (*hashFileSystem)(nil)
+var _ HashFileInfoI = (*HashFileInfo)(nil)
 
-func newBasicFileSystem(rootPath string, capacity int64, calcStorePathFn CalcStoreFilePathFnType) *basicFileSystem {
+func newHashFileSystem(rootPath string, capacity int64, calcStorePathFn CalcStoreFilePathFnType) *hashFileSystem {
 	if err := os.MkdirAll(rootPath, os.ModePerm); err != nil {
 		panic("mkdir error:" + err.Error())
 	}
 	hashDBName := "fileinfo_hash"
-	db, err := database.NewLevelDB(rootPath + "/" + hashDBName)
+	db, err := database.NewLevelDB(filepath.Join(rootPath + "/" + hashDBName))
 	if err != nil {
 		panic("leveldb init error:" + err.Error())
 	}
 
-	bfs := &basicFileSystem{
+	bfs := &hashFileSystem{
 		rootPath:            rootPath,
 		capacity:            capacity,
 		fileInfoDBName:      hashDBName,
@@ -85,17 +85,17 @@ func newBasicFileSystem(rootPath string, capacity int64, calcStorePathFn CalcSto
 		bfs.calcStoreFilePathFn = DefaultCalcStorePathFn
 	}
 
-	cap, ouppy, err := getCapAndOccupy(bfs.levelDB)
+	cap, ouppy, err := getCapAndOccupied(bfs.levelDB)
 
 	if err != nil {
 		log.Println("New File Storage System at", rootPath)
-		storeCapAndOccupy(bfs.levelDB, capacity, 0)
+		storeCapAndOccupied(bfs.levelDB, capacity, 0)
 		return bfs
 	}
 	log.Printf("Detect exist filesystem at %s\n", rootPath)
 
 	bfs.capacity = cap
-	bfs.occupy = ouppy
+	bfs.occupied = ouppy
 
 	if capacity < cap {
 		log.Println("[BFS] capacity is less than exist filesystem, use exist filesystem's capacity.")
@@ -107,7 +107,7 @@ func newBasicFileSystem(rootPath string, capacity int64, calcStorePathFn CalcSto
 	return bfs
 }
 
-func (bfs *basicFileSystem) Store(key, fileName string, value []byte) error {
+func (bfs *hashFileSystem) Store(key, fileName string, value []byte) error {
 	if key == "" {
 		return fmt.Errorf("key is empty")
 	}
@@ -117,14 +117,14 @@ func (bfs *basicFileSystem) Store(key, fileName string, value []byte) error {
 
 	//check exist
 	if bfs.isExist(key) {
-		return nil //ErrExist //XXX: 需要一个更好的处理方案
+		return ErrFileExist
 	}
 	//check capacity
-	if bfs.occupy+int64(len(value)) > bfs.capacity {
+	if bfs.occupied+int64(len(value)) > bfs.capacity {
 		return ErrFull
 	}
 
-	bfi := NewFileInfo(fileName, key, "", int64(len(value)), false)
+	bfi := NewFileInfo(fileName, key, "", int64(len(value)), time.Now())
 
 	// bfi.Path = rootPath/<path>
 	bfi.Path_ = bfs.rootPath + "/" + bfs.calcStoreFilePathFn(bfi)
@@ -143,13 +143,13 @@ func (bfs *basicFileSystem) Store(key, fileName string, value []byte) error {
 		return err
 	}
 
-	//update occupy
-	bfs.occupy += bfi.Size_
+	//update Occupied
+	bfs.occupied += bfi.Size_
 
 	return nil
 }
 
-func (bfs *basicFileSystem) Get(key string) (File, error) {
+func (bfs *hashFileSystem) Get(key string) (HashFileI, error) {
 	if key == "" {
 		return nil, fmt.Errorf("key is empty")
 	}
@@ -158,13 +158,13 @@ func (bfs *basicFileSystem) Get(key string) (File, error) {
 		return nil, err
 	}
 	data, err := bfs.getFile(bfi)
-	return BasicFile{
+	return HashFile{
 		data: data,
 		info: bfi,
 	}, err
 }
 
-func (bfs *basicFileSystem) Delete(key string) error {
+func (bfs *hashFileSystem) Delete(key string) error {
 	if key == "" {
 		return fmt.Errorf("key is empty")
 	}
@@ -178,19 +178,19 @@ func (bfs *basicFileSystem) Delete(key string) error {
 	if err := bfs.deleteFile(bfi); err != nil {
 		return err
 	}
-	if bfs.occupy == 0 {
-		panic("[Delete Panic] occupy is 0")
+	if bfs.occupied == 0 {
+		panic("[Delete Panic] Occupied is 0")
 	}
-	//update occupy
-	bfs.occupy -= bfi.Size_
+	//update Occupied
+	bfs.occupied -= bfi.Size_
 	return nil
 }
 
-func (bfs *basicFileSystem) Set(opt any) error {
+func (bfs *hashFileSystem) Opt(opt any) any {
 	return nil
 }
 
-func (bfs *basicFileSystem) isExist(key string) bool {
+func (bfs *hashFileSystem) isExist(key string) bool {
 	if key == "" {
 		return false
 	}
@@ -198,26 +198,30 @@ func (bfs *basicFileSystem) isExist(key string) bool {
 	return err == nil
 }
 
+func (bfs *hashFileSystem) Cap() int64 {
+	return bfs.capacity
+}
+
 // unit can be "B", "KB", "MB", "GB" or just leave it blank
-func (bfs *basicFileSystem) Occupy(unit ...string) float64 {
+func (bfs *hashFileSystem) Occupied(unit ...string) float64 {
 	if len(unit) == 0 {
-		return float64(bfs.occupy)
+		return float64(bfs.occupied)
 	}
 	switch unit[0] {
 	case "B":
-		return float64(bfs.occupy)
+		return float64(bfs.occupied)
 	case "KB":
-		return float64(bfs.occupy) / 1024
+		return float64(bfs.occupied) / 1024
 	case "MB":
-		return float64(bfs.occupy) / 1024 / 1024
+		return float64(bfs.occupied) / 1024 / 1024
 	case "GB":
-		return float64(bfs.occupy) / 1024 / 1024 / 1024
+		return float64(bfs.occupied) / 1024 / 1024 / 1024
 	default:
-		return float64(bfs.occupy)
+		return float64(bfs.occupied)
 	}
 }
 
-func (bfs *basicFileSystem) storeFile(key BasicFileInfo, value []byte) error {
+func (bfs *hashFileSystem) storeFile(key HashFileInfo, value []byte) error {
 	if bfs.calcStoreFilePathFn == nil {
 		panic("calcStoreFilePathFn is nil")
 	}
@@ -230,7 +234,7 @@ func (bfs *basicFileSystem) storeFile(key BasicFileInfo, value []byte) error {
 	return err
 }
 
-func (bfs *basicFileSystem) getFile(key BasicFileInfo) ([]byte, error) {
+func (bfs *hashFileSystem) getFile(key HashFileInfo) ([]byte, error) {
 	path := key.Path_
 	if path == "" {
 		return nil, errors.New("path is empty")
@@ -246,7 +250,7 @@ func (bfs *basicFileSystem) getFile(key BasicFileInfo) ([]byte, error) {
 	return data, err
 }
 
-func (bfs *basicFileSystem) deleteFile(bfi BasicFileInfo) error {
+func (bfs *hashFileSystem) deleteFile(bfi HashFileInfo) error {
 	fullPath := bfi.Path_ + "/" + bfi.FileName
 	if fullPath == "" {
 		return fmt.Errorf("path is empty")
@@ -255,24 +259,24 @@ func (bfs *basicFileSystem) deleteFile(bfi BasicFileInfo) error {
 	return err
 }
 
-func (bfs *basicFileSystem) getFileInfo(hashSum string) (BasicFileInfo, error) {
+func (bfs *hashFileSystem) getFileInfo(hashSum string) (HashFileInfo, error) {
 	infoBytes, err := bfs.levelDB.Get([]byte(hashSum), nil)
 	if err != nil {
-		return BasicFileInfo{}, err
+		return HashFileInfo{}, err
 	}
-	var info BasicFileInfo
+	var info HashFileInfo
 	// pbfi := &pb.FileInfo{}
 	// err = proto.Unmarshal(infoBytes, pbfi)
 	err = json.Unmarshal(infoBytes, &info)
 	return info, err
 }
 
-func (bfs *basicFileSystem) storeFileInfo(hashSum string, file BasicFileInfo) error {
+func (bfs *hashFileSystem) storeFileInfo(hashSum string, file HashFileInfo) error {
 	if file.FileName == "" {
 		return ErrFileInvalidName
 	}
 	// pbfi := &pb.FileInfo{}
-	// basicFileInfoToPBFileInfo(file, pbfi)
+	// HashFileInfoToPBFileInfo(file, pbfi)
 	// res, err := proto.Marshal(pbfi)
 	res, err := json.Marshal(file)
 	if err != nil {
@@ -282,115 +286,103 @@ func (bfs *basicFileSystem) storeFileInfo(hashSum string, file BasicFileInfo) er
 	return err
 }
 
-func (bfs *basicFileSystem) deleteFileInfo(hashSum string) error {
+func (bfs *hashFileSystem) deleteFileInfo(hashSum string) error {
 	return bfs.levelDB.Delete([]byte(hashSum), nil)
 }
 
-func storeCapAndOccupy(levelDB *leveldb.DB, capacity, occupy int64) error {
+func storeCapAndOccupied(levelDB *leveldb.DB, capacity, Occupied int64) error {
 	if levelDB == nil {
 		panic("levelDB is nil")
 	}
-	var capAndOccupy struct {
+	var capAndOccupied struct {
 		Capacity int64 `json:"capacity"`
-		Occupy   int64 `json:"occupy"`
+		Occupied int64 `json:"Occupied"`
 	}
-	capAndOccupy.Capacity = capacity
-	capAndOccupy.Occupy = occupy
-	res, err := json.Marshal(capAndOccupy)
+	capAndOccupied.Capacity = capacity
+	capAndOccupied.Occupied = Occupied
+	res, err := json.Marshal(capAndOccupied)
 	if err != nil {
 		return err
 	}
-	err = levelDB.Put([]byte("cap_and_occupy"), res, nil)
+	err = levelDB.Put([]byte("cap_and_Occupied"), res, nil)
 	return err
 }
 
-func getCapAndOccupy(levelDB *leveldb.DB) (int64, int64, error) {
+func getCapAndOccupied(levelDB *leveldb.DB) (int64, int64, error) {
 	if levelDB == nil {
 		panic("levelDB is nil")
 	}
-	res, err := levelDB.Get([]byte("cap_and_occupy"), nil)
+	res, err := levelDB.Get([]byte("cap_and_Occupied"), nil)
 	if err != nil {
 		return 0, 0, err
 	}
-	var capAndOccupy struct {
+	var capAndOccupied struct {
 		Capacity int64 `json:"capacity"`
-		Occupy   int64 `json:"occupy"`
+		Occupied int64 `json:"Occupied"`
 	}
-	err = json.Unmarshal(res, &capAndOccupy)
+	err = json.Unmarshal(res, &capAndOccupied)
 	if err != nil {
 		return 0, 0, err
 	}
-	return capAndOccupy.Capacity, capAndOccupy.Occupy, nil
+	return capAndOccupied.Capacity, capAndOccupied.Occupied, nil
 }
 
-func (bfs *basicFileSystem) Close() error {
+func (bfs *hashFileSystem) Close() error {
 	if bfs == nil {
-		panic("basicFileSystem is nil")
+		panic("hashFileSystem is nil")
 	}
-	log.Println("basicFileSystem Closing.")
+	log.Println("hashFileSystem Closing.")
 
 	//save cap and ouppy
-	if err := storeCapAndOccupy(bfs.levelDB, bfs.capacity, bfs.occupy); err != nil {
+	if err := storeCapAndOccupied(bfs.levelDB, bfs.capacity, bfs.occupied); err != nil {
 		log.Println("Save filesystem error:", err)
 	}
 	return bfs.levelDB.Close()
 }
 
-func (b BasicFile) Data() []byte {
+func (b HashFile) Data() []byte {
 	return b.data
 }
 
-func (b BasicFile) Stat() FileInfo {
+func (b HashFile) Stat() HashFileInfoI {
 	return b.info
 }
 
-func NewFileInfo(fileName string, hashSum string, path string, size int64, isDir bool, modTime ...time.Time) BasicFileInfo {
-
-	bfi := BasicFileInfo{
+func NewFileInfo(fileName string, hashSum string, path string, size int64, modTime time.Time) HashFileInfo {
+	bfi := HashFileInfo{
 		FileName: fileName,
 		Hash_:    hashSum,
 		Path_:    path,
 		Size_:    size,
-		Dir_:     isDir,
-	}
-	if len(modTime) == 1 {
-		bfi.ModTime_ = modTime[0]
+		ModTime_: modTime,
 	}
 	return bfi
 }
 
-func (bfi BasicFileInfo) Name() string {
+func (bfi HashFileInfo) Name() string {
 	return bfi.FileName
 }
 
-func (bfi BasicFileInfo) Path() string {
+func (bfi HashFileInfo) Path() string {
 	return bfi.Path_
 }
 
-func (bfi BasicFileInfo) Hash() string {
+func (bfi HashFileInfo) Hash() string {
 	return bfi.Hash_
 }
 
-func (bfi BasicFileInfo) Size() int64 {
+func (bfi HashFileInfo) Size() int64 {
 	return int64(bfi.Size_)
 }
 
-func (bfi BasicFileInfo) IsDir() bool {
-	return bfi.Dir_
-}
-
-func (bfi BasicFileInfo) ModTime() time.Time {
+func (bfi HashFileInfo) ModTime() time.Time {
 	return time.Time{}
 }
 
-func (bfi BasicFileInfo) Mode() os.FileMode {
+func (bfi HashFileInfo) Mode() os.FileMode {
 	return 0
 }
 
-func (BasicFileInfo) SubDir() []SubInfo {
+func (bfi HashFileInfo) PeerInfo() peers.PeerInfo {
 	return nil
-}
-
-func (bfi BasicFileInfo) PeerInfo() peers.PeerInfo {
-	return peers.LocalPeerInfo{}
 }

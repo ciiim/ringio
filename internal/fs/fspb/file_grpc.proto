@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+import "internal/fs/fspb/fileinfo.proto";
+import "internal/fs/fspb/peer_grpc.proto";
+import "internal/fs/fspb/error.proto";
+
+package fspb;
+
+option go_package = "cloudborad/internal/fs/fspb";
+
+message Key {
+    string key = 1;
+}
+
+message PutRequest {
+    Key key = 1;
+    string filename = 2;
+    bytes value = 3;
+}
+
+message GetResponse {
+    bytes data = 1;
+    HashFileInfo file_info = 2;
+    PeerInfo peer_info = 3;
+}
+
+service HashFileSystemService {
+    rpc Get(Key) returns (GetResponse) {}
+    rpc Put(PutRequest) returns (Error) {}
+    rpc Delete(Key) returns (Error) {}
+}
+
+message SpaceRequest {
+    string space = 1;
+}
+
+message NewSpaceRequest {
+    string space = 1;
+    int64 cap = 2;
+}
+
+message TreeFileSystemBasicRequest {
+    string space = 1;
+    string base = 2;
+    string name = 3;
+    string hash = 4;
+}
+
+message RenameDirRequest {
+    TreeFileSystemBasicRequest src = 1;
+    string new_name = 2;
+}
+
+message PutMetadataRequest {
+    TreeFileSystemBasicRequest src = 1;
+    bytes metadata = 2;
+}
+
+message PutMetadataResponse {
+    Error err = 1;
+    string path = 2;
+}
+
+message BytesData {
+    bytes data = 1;
+}
+
+
+service TreeFileSystemService {
+    rpc NewSpace(NewSpaceRequest) returns (Error) {}
+    rpc DeleteSpace(SpaceRequest) returns (Error) {}
+
+    rpc MakeDir(TreeFileSystemBasicRequest) returns (Error) {}
+    rpc RenameDir(RenameDirRequest) returns (Error) {}
+    rpc DeleteDir(TreeFileSystemBasicRequest) returns (Error) {}
+    rpc GetDirSub(TreeFileSystemBasicRequest) returns (Subs) {}
+
+    rpc GetMetadata(TreeFileSystemBasicRequest) returns (BytesData) {}
+    rpc PutMetadata(PutMetadataRequest) returns (PutMetadataResponse) {}
+    rpc DeleteMetadata(TreeFileSystemBasicRequest) returns (Error) {}
+}
+

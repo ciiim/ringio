@@ -5,7 +5,6 @@ import "errors"
 
 var (
 	ErrPeerNotFound = errors.New("peer not found")
-	PeerLocal       = &LocalPeer{}
 )
 
 type PeerStatType int
@@ -49,7 +48,6 @@ type Peer interface {
 	PAddr() string
 	Pick(key string) PeerInfo
 	Info() PeerInfo
-	PeerGetSetDeleter
 	PeerOperator
 }
 
@@ -68,12 +66,6 @@ type PeerResult struct {
 	Info any
 }
 
-type PeerGetSetDeleter interface {
-	Get(pi PeerInfo, key string) PeerResult
-	Put(pi PeerInfo, key string, filename string, value []byte) PeerResult
-	Delete(pi PeerInfo, key string) PeerResult
-}
-
 type PeerOperator interface {
 	PAdd(pis ...PeerInfo)
 	PDel(pis ...PeerInfo)
@@ -82,66 +74,4 @@ type PeerOperator interface {
 	PActionTo(action PeerActionType, pi_to ...PeerInfo) error
 	GetPeerListFromPeer(pi PeerInfo) ([]PeerInfo, error)
 	PList() []PeerInfo
-}
-
-type LocalPeer struct {
-}
-
-type LocalPeerInfo struct {
-	name string
-	addr string
-}
-
-func (lp LocalPeer) PAddr() string {
-	return "local"
-}
-
-func (lp LocalPeer) Pick(key string) PeerInfo {
-	return lp.Info()
-}
-
-func (lp LocalPeer) Info() PeerInfo {
-	return LocalPeerInfo{
-		name: "local",
-		addr: "localhost",
-	}
-}
-
-func (lp LocalPeer) Get(pi PeerInfo, key string) PeerResult {
-	return PeerResult{Err: errors.New("not support")}
-}
-
-func (lp LocalPeer) Put(pi PeerInfo, key string, filename string, value []byte) PeerResult {
-	return PeerResult{Err: errors.New("not support")}
-}
-
-func (lp LocalPeer) Delete(pi PeerInfo, key string) PeerResult {
-	return PeerResult{Err: errors.New("not support")}
-}
-
-func (lp LocalPeer) PAdd(pis ...PeerInfo) {
-
-}
-
-func (lp LocalPeer) PDel(pis ...PeerInfo) {
-}
-
-func (lpi LocalPeerInfo) Equal(pi PeerInfo) bool {
-	return lpi.name == pi.PName() && lpi.addr == pi.PAddr()
-}
-
-func (lpi LocalPeerInfo) PName() string {
-	return lpi.name
-}
-
-func (lpi LocalPeerInfo) PAddr() string {
-	return lpi.addr
-}
-
-func (lpi LocalPeerInfo) PStat() PeerStatType {
-	return P_STAT_ONLINE
-}
-
-func (lpi LocalPeerInfo) Port() string {
-	return "local"
 }

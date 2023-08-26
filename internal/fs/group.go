@@ -1,29 +1,24 @@
 package fs
 
 import (
-	"errors"
-	"io"
 	"log"
-	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 const (
 	GroupFSLimit int  = 1
-	BLOCK_SIZE   Byte = 1024 * 1024 * 4 // 4MB
+	BLOCK_SIZE   Byte = 1024 * 1024 * 5 // 5MB
 )
 
+//TODO: 事务(transaction)系统，提供事务接口，支持事务回滚，实现文件下载和上传的事务
+//TODO: 秒传模块，相同Hash的文件秒传
+//TODO: 节点强一致性，保证节点信息一致性
 /*
-Group is a group of file systems.
+Group 是一个文件系统的集合，包含一个前端文件系统和一个后端文件系统。
 
-It contains a front system and a list of distributed file systems.
-
-front system is used to store the meta data of the file.
-
-distributed file systems are used to store the blocks of the file.
+前端文件系统负责文件的元数据管理，后端文件系统负责文件的存储。
 */
 type Group struct {
 	groupName string
@@ -31,7 +26,7 @@ type Group struct {
 	/*
 		It will store the meta data of the file
 	*/
-	FrontSystem DistributeFileSystem
+	FrontSystem TreeDFileSystemI
 
 	/*
 		A list of File System
@@ -39,109 +34,43 @@ type Group struct {
 		Only can use one FileSystem just now.
 		XXX: support redundancy in the future.
 	*/
-	StoreSystems []DistributeFileSystem
+	StoreSystem HashDFileSystemI
 }
 
-func NewGroup(groupName string, frontSystem DistributeFileSystem) *Group {
+func NewGroup(groupName string, frontSystem TreeDFileSystemI, storeSystem HashDFileSystemI) *Group {
 	return &Group{
-		groupName:    groupName,
-		StoreSystems: make([]DistributeFileSystem, 0, 10),
-		FrontSystem:  frontSystem,
+		groupName:   groupName,
+		StoreSystem: storeSystem,
+		FrontSystem: frontSystem,
 	}
 }
-
-func (g *Group) SetFrontSystem(fs DistributeFileSystem) {
-	if g.FrontSystem != nil {
-		log.Println("[Group] DO NOT set front system again.")
-		return
-	}
-	g.FrontSystem = fs
-}
-
-func (g *Group) UseFS(fs ...DistributeFileSystem) {
-	if len(g.StoreSystems)+len(fs) > GroupFSLimit {
-		log.Println("[Group] Reached the limit")
-		return
-	}
-	g.StoreSystems = append(g.StoreSystems, fs...)
-}
-
 func (g *Group) Serve() {
-	for _, fs := range g.StoreSystems {
-		go fs.Serve()
-	}
+	go g.StoreSystem.Serve()
 	g.FrontSystem.Serve()
 }
 
 //User method field
 
 func (g *Group) NewBorad(spaceKey string) error {
-	return g.FrontSystem.Store(spaceKey, NEW_SPACE, nil)
+	return g.FrontSystem.NewSpace(spaceKey, GB)
 }
 
-func (g *Group) StoreFile(spaceKey, filehash, basePath, filename string, blocksStream io.ReadCloser, blocks []Fileblock) error {
-	if blocksStream == nil {
-		return errors.New("blocksStream is nil")
-	}
-
-	//calculate the file size
-	var filesize int64
-	for _, block := range blocks {
-		filesize += block.Size
-	}
-
-	// generate the metadata
-	metadata := newMetaData(filename, filehash, filesize, time.Now(), blocks)
-	metadataBytes := marshalMetaData(metadata)
-
-	//save metadata
-	err := g.FrontSystem.Store(spaceKey, filepath.Join(basePath, filename+META_FILE_SUFFIX), metadataBytes)
-	if err != nil {
-		return err
-	}
-
-	//save blocks
-	var wg sync.WaitGroup
-	wg.Add(len(g.StoreSystems))
-	defer blocksStream.Close()
-	log.Println("[Group] Start to store blocks")
-	//TODO
-	wg.Wait()
-	return nil
-}
-
-func (g *Group) Delete(spaceKey, fullpath string) error {
+func (g *Group) DeleteFile(spaceKey, base, name string) error {
 
 	// You can see the format definition in dtreefs.go -> Delete Function
-	delString := filepath.Join(spaceKey, fullpath)
-	meta, err := g.GetMetaData(delString)
+	meta, err := g.GetMetaData(spaceKey, base, name)
 	if err != nil {
 		return err
 	}
+	metadata := &Metadata{}
+	unmarshalMetaData(meta, metadata)
 	var wg sync.WaitGroup
-	wg.Add(len(meta.Blocks))
-	for _, block := range meta.Blocks {
+	wg.Add(len(metadata.Blocks))
+	for _, block := range metadata.Blocks {
 		go g.DeleteBlock(block, &wg)
 	}
 	wg.Wait()
-	return g.DeleteMetaData(delString)
-}
-
-func (g *Group) Mkdir(spaceKey, basePath, dirName string) error {
-
-	//Add DIR_PERFIX for FileSystem to Specify the dir
-	//But the real dir name that store in the front system is the dirName.
-	realDirString := filepath.Join(basePath, DIR_PERFIX+dirName)
-	log.Println("[Group] Mkdir:", realDirString)
-	return g.FrontSystem.Store(spaceKey, realDirString, nil)
-}
-
-func (g *Group) GetDir(spaceKey, basePath, dirName string) (File, error) {
-
-	// You can see the format definition in dtreefs.go -> Get Function
-	getString := filepath.Join(spaceKey, basePath, dirName)
-	log.Printf("[Group] Get space %s dir:%s\n", spaceKey, getString)
-	return g.FrontSystem.Get(getString)
+	return g.DeleteMetaData(spaceKey, base, name)
 }
 
 /*
@@ -156,73 +85,53 @@ func (g *Group) Close() error {
 	if err != nil {
 		log.Println("[Group] Close front system error:", err)
 	}
-	for _, fs := range g.StoreSystems {
-		err = fs.Close()
-		if err != nil {
-			log.Println("[Group] Close file system error:", err)
-		}
-	}
+	err = g.StoreSystem.Close()
 	return err
 }
 
 /*
 key - format: <spaceKey>/<filefullpath>
 */
-func (g *Group) GetMetaData(key string) (Metadata, error) {
+func (g *Group) GetMetaData(space, base, name string) ([]byte, error) {
 	//get metadata
-	metadataFile, err := g.FrontSystem.Get(key + META_FILE_SUFFIX)
+	metadata, err := g.FrontSystem.GetMetadata(space, base, name)
 	if err != nil {
-		return Metadata{}, err
+		return nil, err
 	}
-	metadataBytes := metadataFile.Data()
 
-	//read metadata
-	var meta Metadata
-	readMetaDataByBytes(metadataBytes, &meta)
-
-	return meta, nil
+	return metadata, nil
 }
 
-func (g *Group) DeleteMetaData(key string) error {
-	return g.FrontSystem.Delete(key + META_FILE_SUFFIX)
+func (g *Group) DeleteMetaData(space, base, name string) error {
+	return g.FrontSystem.DeleteMetadata(space, base, name+META_FILE_SUFFIX)
 }
 
 func (g *Group) GetBlockData(blockInfo Fileblock) ([]byte, error) {
 	var err error
-	for _, fs := range g.StoreSystems {
-		file, err := fs.Get(blockInfo.Hash)
-		if err == nil && int64(len(file.Data())) == blockInfo.Size {
-			return file.Data(), nil
-		}
+	file, err := g.StoreSystem.Get(blockInfo.Hash)
+	if err != nil {
+		return file.Data(), nil
 	}
 	return nil, err
 }
 
 func (g *Group) DeleteBlock(blockInfo Fileblock, wg *sync.WaitGroup) error {
-	var err error
-	for _, fs := range g.StoreSystems {
-		err = fs.Delete(blockInfo.Hash)
-		if err == nil {
-			return nil
-		}
-	}
-	wg.Done()
+	err := g.StoreSystem.Delete(blockInfo.Hash)
 	return err
 }
+
+//Peer method field
 
 func (g *Group) AddPeer(name, addr string) {
 	if name == "" || addr == "" {
 		return
 	}
-	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, addr+":"+FRONT_PORT))
-	for _, fs := range g.StoreSystems {
-		fs.Peer().PAdd(NewDPeerInfo(name, addr+":"+FILE_STORE_PORT))
-	}
+	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_TDFS_PORT)))
+	g.StoreSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_HDFS_PORT)))
 }
 
 func (g *Group) PeerList() []DPeerInfo {
 	peers := make([]DPeerInfo, len(g.FrontSystem.Peer().PList()))
-
 	return peers
 }
 
@@ -233,8 +142,8 @@ func (g *Group) Join(name, addr string) error {
 
 	//boradcast to group and get all peers of the group
 
-	frontDest := NewDPeerInfo(name, addr+":"+FRONT_PORT)
-	storeDest := NewDPeerInfo(name, addr+":"+FILE_STORE_PORT)
+	frontDest := NewDPeerInfo(name, WithPort(addr, RPC_TDFS_PORT))
+	storeDest := NewDPeerInfo(name, WithPort(addr, RPC_HDFS_PORT))
 
 	//Join Cluster
 	err := g.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontDest)
@@ -253,25 +162,21 @@ func (g *Group) Join(name, addr string) error {
 		_ = g.FrontSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
 	}
 
-	// for each StoreSystem
-	for _, fs := range g.StoreSystems {
+	//Join Cluster
+	err = g.StoreSystem.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
+	if err != nil {
+		return err
+	}
 
-		//Join Cluster
-		err = fs.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
-		if err != nil {
-			return err
-		}
+	// Get List from cluster
+	peerList, err = g.StoreSystem.Peer().GetPeerListFromPeer(storeDest)
+	if err != nil {
+		return err
+	}
 
-		// Get List from cluster
-		peerList, err = fs.Peer().GetPeerListFromPeer(storeDest)
-		if err != nil {
-			return err
-		}
-
-		//Add to peer map
-		for _, peer := range peerList {
-			_ = fs.Peer().PSync(peer, peers.P_ACTION_NEW)
-		}
+	//Add to peer map
+	for _, peer := range peerList {
+		_ = g.StoreSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
 	}
 
 	return nil
@@ -279,10 +184,7 @@ func (g *Group) Join(name, addr string) error {
 
 func (g *Group) Quit() {
 	g.FrontSystem.Peer().PSync(g.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
-	for _, fs := range g.StoreSystems {
-		fs.Peer().PSync(g.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
-	}
-
+	g.StoreSystem.Peer().PSync(g.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
 }
 
 func (g *Group) SyncPeer(pi peers.PeerInfo, action peers.PeerActionType) error {
@@ -290,11 +192,6 @@ func (g *Group) SyncPeer(pi peers.PeerInfo, action peers.PeerActionType) error {
 	if err != nil {
 		return err
 	}
-	for _, fs := range g.StoreSystems {
-		err = fs.Peer().PSync(pi, action)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	err = g.StoreSystem.Peer().PSync(pi, action)
+	return err
 }

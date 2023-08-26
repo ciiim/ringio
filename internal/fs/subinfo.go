@@ -11,7 +11,7 @@ type SubInfo struct {
 	ModTime time.Time `json:"mod_time"`
 }
 
-func DirEntryToSubList(de []fs.DirEntry) []SubInfo {
+func DirEntryToSubInfo(de []fs.DirEntry) []SubInfo {
 	var subList []SubInfo
 	for _, v := range de {
 		info, _ := v.Info()

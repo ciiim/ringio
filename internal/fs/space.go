@@ -26,45 +26,20 @@ type Space struct {
 	occupy   Byte
 }
 
-// xxx/zzz/file.txt
-func (s *Space) Store(fullpath string, data []byte) (err error) {
-	sep := strings.Split(fullpath, "/")
-	if strings.Contains(sep[len(sep)-1], DIR_PERFIX) {
-		sep[len(sep)-1] = strings.TrimLeft(sep[len(sep)-1], DIR_PERFIX)
-		fullpath = strings.Join(sep, "/")
-		err = s.MkDir(fullpath)
-	} else {
-		err = s.storeFile(fullpath, data, os.O_CREATE|os.O_WRONLY)
-	}
-	return err
+func (s *Space) storeMetaData(base, fileName string, metadata []byte) (err error) {
+
+	return s.i_storeMetadata(base, fileName, metadata, os.O_CREATE|os.O_WRONLY)
+
 }
 
-func (s *Space) Get(fullpath string) (File, error) {
-	stat, err := os.Stat(s.getFullPath(fullpath))
-	if err != nil {
-		return nil, err
-	}
-	if stat == nil {
-		return nil, ErrFileNotFound
-	}
-	if stat.IsDir() {
-		subDir, _ := s.getDir(fullpath)
-		return TreeFile{
-			data: nil,
-			info: TreeFileInfo{
-				NewFileInfo(stat.Name(), "", fullpath, stat.Size(), true, stat.ModTime()),
-				DirEntryToSubList(subDir),
-			},
-		}, nil
-	} else {
-		return s.getFile(fullpath)
-	}
+func (s *Space) getMetadata(base, fileName string) ([]byte, error) {
+	return s.i_getMetadata(base, fileName)
 }
 
-func (s *Space) Delete(fullpath string) error {
+func (s *Space) deleteMetaData(base, fileName string) error {
 
 	//TODO: 防止删除fullpath的上级目录
-	size, err := s.GetSize(fullpath)
+	size, err := s.GetSize(base, fileName)
 	if err != nil {
 		return err
 	}
@@ -73,46 +48,50 @@ func (s *Space) Delete(fullpath string) error {
 	}
 	s.occupy -= int64(size)
 
-	return os.RemoveAll(s.getFullPath(fullpath))
+	return os.Remove(s.getFullPath(base, fileName))
 }
 
-func (s *Space) MkDir(fullpath string) error {
+func (s *Space) makeDir(base, fileName string) error {
 
 	//TODO: 防止创建到dir的上级目录内
 
-	return os.Mkdir(s.getFullPath(fullpath), 0755)
+	return os.Mkdir(s.getFullPath(base, fileName), 0755)
 }
 
-func (s *Space) getDir(fullpath string) ([]fs.DirEntry, error) {
+func (s *Space) renameDir(base, fileName, newName string) error {
+	return os.Rename(s.getFullPath(base, fileName), s.getFullPath(base, newName))
+}
+
+func (s *Space) deleteDir(base, fileName string) error {
+	return os.RemoveAll(s.getFullPath(base, fileName))
+}
+
+func (s *Space) getDir(base, fileName string) ([]fs.DirEntry, error) {
 
 	//TODO: 防止访问dir的上级目录
-	return os.ReadDir(s.getFullPath(fullpath))
+	return os.ReadDir(s.getFullPath(base, fileName))
 }
 
-func (s *Space) storeFile(fullpath string, data []byte, flag int) error {
-
-	if s.willFull(int64(len(data))) {
-		return ErrFull
-	}
-	file, err := os.OpenFile(s.getFullPath(fullpath), flag, 0666)
+func (s *Space) i_storeMetadata(base, fileName string, metadata []byte, flag int) error {
+	file, err := os.OpenFile(s.getFullPath(base, fileName), flag, 0666)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 	info, _ := file.Stat()
 	oldSize := info.Size()
-	_, err = file.Write(data)
+	_, err = file.Write(metadata)
 	if err != nil {
 		return err
 	}
-	newSize := info.Size()
+	newSize := int64(len(metadata))
 	s.occupy += Byte(newSize - oldSize)
 
 	return nil
 }
 
-func (s *Space) getFile(fullpath string) (File, error) {
-	file, err := os.Open(s.getFullPath(fullpath))
+func (s *Space) i_getMetadata(base, fileName string) ([]byte, error) {
+	file, err := os.Open(s.getFullPath(base, fileName))
 	if err != nil {
 		return nil, err
 	}
@@ -120,17 +99,12 @@ func (s *Space) getFile(fullpath string) (File, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO: 补全hash和path
-	bfi := NewFileInfo(info.Name(), "", fullpath, info.Size(), info.IsDir())
+	if info.IsDir() {
+		return nil, ErrIsDir
+	}
 	data := make([]byte, info.Size())
 	_, err = file.Read(data)
-	return TreeFile{
-		data: data,
-		info: TreeFileInfo{
-			bfi,
-			nil,
-		},
-	}, err
+	return data, err
 }
 
 // save space stat
@@ -144,7 +118,7 @@ func (s *Space) save() error {
 
 func (s *Space) Close(calcSize ...bool) error {
 	if len(calcSize) == 1 && calcSize[0] {
-		s.occupy, _ = s.GetSize("")
+		s.occupy, _ = s.GetSize("", "")
 	}
 	log.Println("close space", s.spaceKey)
 	return s.save()
@@ -173,9 +147,9 @@ func (s *Space) Occupy(unit ...string) float64 {
 }
 
 // Get "this" size, "this" can be a file or a dir
-func (s *Space) GetSize(fullpath string) (Byte, error) {
+func (s *Space) GetSize(base, target string) (Byte, error) {
 	var size Byte
-	err := filepath.WalkDir(s.getFullPath(fullpath), func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(s.getFullPath(base, target), func(path string, d fs.DirEntry, err error) error {
 		if d == nil {
 			return fmt.Errorf("path %s not exist", path)
 		}
@@ -205,11 +179,11 @@ func (s *Space) willFull(delta int64) bool {
 	return s.occupy+delta > s.capacity
 }
 
-func (s *Space) getFullPath(fullpath string) string {
-	if strings.Contains(fullpath, BASE_DIR) {
-		return filepath.Join(s.root, s.spaceKey, fullpath)
+func (s *Space) getFullPath(base, target string) string {
+	if strings.Contains(base, BASE_DIR) {
+		return filepath.Join(s.root, s.spaceKey, base, target)
 	}
-	return filepath.Join(s.root, s.spaceKey, s.base, fullpath)
+	return filepath.Join(s.root, s.spaceKey, s.base, base, target)
 }
 
 func (s *Space) getStatPath() string {

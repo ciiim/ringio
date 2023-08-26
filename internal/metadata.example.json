@@ -1,0 +1,26 @@
+{
+    "file_meta_id": "testhash1",
+    "file_name": "test",
+    "file_size": 3072,
+    "file_mod_time": "2023-08-24T17:34:10.860255035+08:00",
+    "block_list": [
+        {
+            "block_id": 0,
+            "block_host": "10.0.0.5",
+            "block_hash": "hash1",
+            "block_size": 1024
+        },
+        {
+            "block_id": 1,
+            "block_host": "10.0.0.7",
+            "block_hash": "hash2",
+            "block_size": 1024
+        },
+        {
+            "block_id": 2,
+            "block_host": "10.0.0.5",
+            "block_hash": "hash3",
+            "block_size": 1024
+        }
+    ]
+}

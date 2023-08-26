@@ -8,6 +8,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/ciiim/cloudborad/internal/database"
+	"github.com/ciiim/cloudborad/internal/fs/peers"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const (
@@ -16,24 +21,28 @@ const (
 
 type DirEntry = fs.DirEntry
 
-type treeFS struct {
+type treeFileSystem struct {
 	rootPath string
-	// capacity Byte
-	// occupy   Byte
-	openSpaces map[string]*Space
+
+	levelDB *leveldb.DB
 }
 
 type TreeFile struct {
-	data []byte
-	info TreeFileInfo
+	metadata Metadata
+	info     TreeFileInfo
 }
 
 type TreeFileInfo struct {
-	BasicFileInfo
-	subDir []SubInfo
+	fileName string
+	path     string
+	size     int64
+	isDir    bool
+	modTime  time.Time
+	subDir   []SubInfo
 }
 
-var _ FileInfo = (*TreeFileInfo)(nil)
+var _ TreeFileSystemI = (*treeFileSystem)(nil)
+var _ TreeFileI = (*TreeFile)(nil)
 
 const (
 	DIR_PERFIX = "__DIR__"
@@ -41,48 +50,50 @@ const (
 	BASE_DIR   = "__BASE__"
 )
 
-func NewTreeFS(rootPath string) *treeFS {
-	t := &treeFS{
-		rootPath:   rootPath,
-		openSpaces: make(map[string]*Space, 16),
-	}
-	err := os.MkdirAll(rootPath, 0755)
+func newTreeFileSystem(rootPath string) *treeFileSystem {
+	err := os.MkdirAll(rootPath, os.ModePerm)
 	if err != nil {
-		return nil
+		panic("mkdir error:" + err.Error())
+	}
+	metadataHashDBName := "metadata_hash"
+	db, err := database.NewLevelDB(filepath.Join(rootPath + "/" + metadataHashDBName))
+	if err != nil {
+		panic("leveldb init error:" + err.Error())
+	}
+	t := &treeFileSystem{
+		rootPath: rootPath,
+		levelDB:  db,
 	}
 	return t
 }
 
-func (t *treeFS) NewSpace(spaceKey string, cap Byte) (*Space, error) {
+func (t *treeFileSystem) NewSpace(space string, cap Byte) error {
 
-	if _, err := os.Stat(filepath.Join(t.rootPath, spaceKey, BASE_DIR)); err == nil {
-		return t.GetSpace(spaceKey), ErrSpaceExist
+	if _, err := os.Stat(filepath.Join(t.rootPath, space, BASE_DIR)); err == nil {
+		return ErrSpaceExist
 	}
 
-	err := os.Mkdir(filepath.Join(t.rootPath, spaceKey), 0755)
+	err := os.Mkdir(filepath.Join(t.rootPath, space), 0755)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	err = os.Mkdir(filepath.Join(t.rootPath, spaceKey, BASE_DIR), 0755)
+	err = os.Mkdir(filepath.Join(t.rootPath, space, BASE_DIR), 0755)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	file, err := os.Create(filepath.Join(t.rootPath, spaceKey, STAT_FILE))
+	file, err := os.Create(filepath.Join(t.rootPath, space, STAT_FILE))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, err = file.WriteString(fmt.Sprintf("%d,0", cap))
 
-	return t.GetSpace(spaceKey), err
+	return err
 }
 
-func (t *treeFS) GetSpace(spaceKey string) *Space {
-	if s, ok := t.openSpaces[spaceKey]; ok {
-		return s
-	}
-	file, err := os.Open(filepath.Join(t.rootPath, spaceKey, STAT_FILE))
+func (t *treeFileSystem) GetSpace(space string) *Space {
+	file, err := os.Open(filepath.Join(t.rootPath, space, STAT_FILE))
 	if err != nil {
 		log.Println("[Space] Lack of stat file", err)
 		return nil
@@ -100,41 +111,153 @@ func (t *treeFS) GetSpace(spaceKey string) *Space {
 	occupy, _ := strconv.ParseInt(capANDoccupy[1], 10, 64)
 	s := &Space{
 		root:     t.rootPath,
-		spaceKey: spaceKey,
+		spaceKey: space,
 		base:     BASE_DIR,
 		capacity: cap,
 		occupy:   occupy,
 	}
-	t.openSpaces[spaceKey] = s
 	return s
 }
 
-func (t *treeFS) ModifySpace(spaceKey string, cap Byte) error {
-	space, ok := t.openSpaces[spaceKey]
-	if !ok {
+func (t *treeFileSystem) DeleteSpace(space string) error {
+	if _, err := os.Stat(filepath.Join(t.rootPath, space, BASE_DIR)); err != nil {
 		return ErrSpaceNotFound
 	}
-	return space.ModifyCap(cap)
+	return os.RemoveAll(filepath.Join(t.rootPath, space))
 }
 
-func (t *treeFS) RemoveSpace(spaceKey string) error {
+func (t *treeFileSystem) MakeDir(space, base, name string) error {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return ErrSpaceNotFound
+	}
+	return sp.makeDir(base, name)
 
-	//TODO: check if space is open
-
-	return os.RemoveAll(filepath.Join(t.rootPath, spaceKey))
 }
 
-func (tf TreeFile) Data() []byte {
-	return tf.data
+func (t *treeFileSystem) RenameDir(space, base, name, newName string) error {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return ErrSpaceNotFound
+	}
+	return sp.renameDir(base, name, newName)
+
 }
 
-func (tf TreeFile) Stat() FileInfo {
+func (t *treeFileSystem) DeleteDir(space, base, name string) error {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return ErrSpaceNotFound
+	}
+	return sp.deleteDir(base, name)
+
+}
+
+func (t *treeFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error) {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return nil, ErrSpaceNotFound
+	}
+	des, err := sp.getDir(base, name)
+	if err != nil {
+		return nil, err
+	}
+	return DirEntryToSubInfo(des), nil
+
+}
+
+func (t *treeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return nil, ErrSpaceNotFound
+	}
+	return sp.getMetadata(base, name)
+
+}
+
+func (t *treeFileSystem) PutMetadata(space, base, name, fileHash string, data []byte) (string, error) {
+
+	dataPath, err := t.levelDB.Get([]byte(fileHash), nil)
+	if err == nil {
+		return string(dataPath), ErrFileExist
+	}
+
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return "", ErrSpaceNotFound
+	}
+
+	err = sp.storeMetaData(base, name, data)
+	if err != nil {
+		return "", err
+	}
+	err = t.levelDB.Put([]byte(fileHash), []byte(filepath.Join(space, base, name)), nil)
+	return filepath.Join(space, base, name), err
+
+}
+func (t *treeFileSystem) DeleteMetadata(space, base, name string) error {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return ErrSpaceNotFound
+	}
+	data, err := sp.getMetadata(base, name)
+	if err != nil {
+		return err
+	}
+	metadata := &Metadata{}
+	unmarshalMetaData(data, metadata)
+	err = sp.deleteMetaData(base, name)
+	if err != nil {
+		return err
+	}
+	err = t.levelDB.Delete([]byte(metadata.Hash), nil)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func (t *treeFileSystem) Close() error {
+	return t.levelDB.Close()
+}
+
+func (tf TreeFile) Metadata() []byte {
+	data, _ := marshalMetaData(&tf.metadata)
+	return data
+}
+
+func (tf TreeFile) Stat() TreeFileInfoI {
 	return tf.info
 }
 
-func (tfi TreeFileInfo) SubDir() []SubInfo {
+func (tfi TreeFileInfo) Name() string {
+	return tfi.fileName
+}
+
+func (tfi TreeFileInfo) Size() int64 {
+	return tfi.size
+}
+
+func (tfi TreeFileInfo) Path() string {
+	return tfi.path
+}
+
+func (tfi TreeFileInfo) IsDir() bool {
+	return tfi.isDir
+}
+
+func (tfi TreeFileInfo) ModTime() time.Time {
+	return tfi.modTime
+}
+
+func (tfi TreeFileInfo) Sub() []SubInfo {
 	if tfi.IsDir() {
 		return tfi.subDir
 	}
+	return nil
+}
+
+func (tfi TreeFileInfo) PeerInfo() peers.PeerInfo {
 	return nil
 }

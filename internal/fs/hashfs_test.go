@@ -14,18 +14,18 @@ var testData = strings.Repeat("文", 1024*5)
 var testDataLen = len(testData)
 var testCap int64 = 1024 * 1024 * 1024
 
-func TestBasicFileSystem(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", testCap, nil)
+func TestHashFileSystem(t *testing.T) {
+	f := newHashFileSystem("./filestorage/block", testCap, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	defer f.Close()
 }
 
 func TestStore(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", 1024*10, nil)
+	f := newHashFileSystem("./filestorage/block", 1024*10, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	md5 := fmt.Sprintf("%x", md5.Sum(append([]byte(testFileName), byte(testDataLen))))
 	if err := f.Store(md5, testFileName, []byte(testData)); err != nil {
@@ -36,9 +36,9 @@ func TestStore(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", testCap, nil)
+	f := newHashFileSystem("./filestorage/block", testCap, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	defer f.Close()
 	md5 := fmt.Sprintf("%x", md5.Sum(append([]byte(testFileName), byte(testDataLen))))
@@ -52,22 +52,22 @@ func TestGet(t *testing.T) {
 	t.Log("GetFileName:", info.Name())
 	t.Log("GetFileHash:", info.Hash())
 	t.Log("GetFileSize:", info.Size())
-	t.Logf("occupy:%f", f.Occupy("KB"))
+	t.Logf("occupy:%f", f.Occupied("KB"))
 }
 
 func TestOccupy(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", 1024*20, nil)
+	f := newHashFileSystem("./filestorage/block", 1024*20, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	defer f.Close()
-	fmt.Printf("f.Occupy(): %v\n", f.Occupy("MB"))
+	fmt.Printf("f.Occupy(): %v\n", f.Occupied("MB"))
 }
 
 func TestBigFile(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", testCap, nil)
+	f := newHashFileSystem("./filestorage/block", testCap, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	defer f.Close()
 	//2 MB file
@@ -124,9 +124,9 @@ func TestBigFile(t *testing.T) {
 }
 
 func TestBigFileStore(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", testCap, nil)
+	f := newHashFileSystem("./filestorage/block", testCap, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	defer f.Close()
 	filename0 := "2test2MB.txt"
@@ -145,9 +145,9 @@ func TestBigFileStore(t *testing.T) {
 }
 
 func TestBigFileGet(t *testing.T) {
-	f := newBasicFileSystem("./filestorage/block", testCap, nil)
+	f := newHashFileSystem("./filestorage/block", testCap, nil)
 	if f == nil {
-		t.Error("newBasicFileSystem error")
+		t.Error("newHashFileSystem error")
 	}
 	defer f.Close()
 	// filename0 := "2test2MB.txt"
