@@ -1,8 +1,12 @@
 package server
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"log"
 	"net"
+	"strconv"
+	"time"
 )
 
 func GetIP() string {
@@ -18,4 +22,11 @@ func GetIP() string {
 		}
 	}
 	return ""
+}
+
+func genStoreID() string {
+	timeStr := strconv.Itoa(int(time.Now().UnixMilli()))
+	sum := sha1.Sum([]byte(timeStr))
+	return hex.EncodeToString(sum[:])
+
 }

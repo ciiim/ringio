@@ -1,11 +1,9 @@
 package server
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"log"
-	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ciiim/cloudborad/internal/fs"
@@ -17,7 +15,11 @@ type BeginStoreInfo struct {
 }
 
 type storeBlocks struct {
-	storeID    int64
+	storeID    string
+	space      string
+	base       string
+	fileName   string
+	hash       string
 	blocks     [][]byte
 	blockDatas []fs.Fileblock
 	nums       int
@@ -29,7 +31,8 @@ type Server struct {
 	_IP        string
 	Group      *fs.Group
 
-	storeMap map[int64]*storeBlocks
+	mu       sync.RWMutex
+	storeMap map[string]*storeBlocks
 }
 
 /*
@@ -71,19 +74,72 @@ func (s *Server) StartServer(addr string, apiServiceEnable bool) {
 
 */
 
-func (s *Server) BeginStoreFile(space, base, name, hash string, blocksNum int) (storeID int64, err error) {
-	timeStr := strconv.Itoa(int(time.Now().UnixMilli()))
-	sum := sha1.Sum([]byte(timeStr))
-	fmt.Printf("hex.EncodeToString(sum[:]): %v\n", hex.EncodeToString(sum[:]))
-	return 0, nil
+func (s *Server) BeginStoreFile(space, base, name, hash string, blocksNum int) (storeID string, err error) {
+	path, has := s.Group.FrontSystem.HasSameMetadata(hash)
+	if has {
+		var metadata fs.Metadata
+		data, _ := s.Group.FrontSystem.GetMetadata(path.Space, path.Base, path.Name)
+		fs.UnmarshalMetaData(data, &metadata)
+		metadata.ModTime = time.Now()
+		metadata.Filename = name
+		data, _ = fs.MarshalMetaData(&metadata)
+		err = s.Group.FrontSystem.PutMetadata(path.Space, path.Base, path.Name, metadata.Hash, data)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	storeID = genStoreID()
+	s.storeMap[storeID] = &storeBlocks{
+		storeID:    storeID,
+		space:      space,
+		base:       base,
+		fileName:   name,
+		hash:       hash,
+		blocks:     make([][]byte, blocksNum),
+		blockDatas: make([]fs.Fileblock, blocksNum),
+		nums:       blocksNum,
+		now:        0,
+	}
+	return
 }
 
-func (s *Server) StoreBlock(space, base, name, hash string, data []byte) {
-
+func (s *Server) StoreBlock(storeID, hash string, data []byte) error {
+	s.mu.Lock()
+	info, ok := s.storeMap[storeID]
+	s.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("storeID not exist")
+	}
+	if info.now > info.nums {
+		s.mu.Lock()
+		delete(s.storeMap, storeID)
+		s.mu.Unlock()
+		return fmt.Errorf("block nums is enough,something wrong")
+	}
+	info.blocks[info.now] = data
+	info.blockDatas[info.now] = fs.NewFileBlock(s.Group.StoreSystem.Peer().Pick(hash).PAddr(), int64(len(data)), hash)
+	info.now++
+	return nil
 }
 
-func (s *Server) EndStoreFile() {
-
+func (s *Server) EndStoreFile(storeID string) error {
+	s.mu.RLock()
+	info, ok := s.storeMap[storeID]
+	s.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("storeID not exist")
+	}
+	for i, v := range info.blocks {
+		bi := info.blockDatas[i]
+		s.Group.StoreSystem.Store(bi.Hash, fmt.Sprintf("%s_%d", info.fileName, bi.BlockID), v)
+	}
+	metadata := fs.NewMetaData(info.fileName, info.hash, time.Now(), info.blockDatas)
+	data, _ := fs.MarshalMetaData(&metadata)
+	err := s.Group.FrontSystem.PutMetadata(info.space, info.base, info.fileName, info.hash, data)
+	s.mu.Lock()
+	delete(s.storeMap, storeID)
+	s.mu.Unlock()
+	return err
 }
 
 func (s *Server) GetFile(space, base, name string) {

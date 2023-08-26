@@ -56,9 +56,13 @@ message PutMetadataRequest {
     bytes metadata = 2;
 }
 
-message PutMetadataResponse {
-    Error err = 1;
-    string path = 2;
+message HasSameMetadataRequest {
+    string hash = 1;
+}
+
+message HasSameMetadataResponse {
+    TreeFileSystemBasicRequest info = 1;
+    bool has = 2;
 }
 
 message BytesData {
@@ -76,7 +80,8 @@ service TreeFileSystemService {
     rpc GetDirSub(TreeFileSystemBasicRequest) returns (Subs) {}
 
     rpc GetMetadata(TreeFileSystemBasicRequest) returns (BytesData) {}
-    rpc PutMetadata(PutMetadataRequest) returns (PutMetadataResponse) {}
+    rpc HasSameMetadata(HasSameMetadataRequest) returns (HasSameMetadataResponse) {}
+    rpc PutMetadata(PutMetadataRequest) returns (Error) {}
     rpc DeleteMetadata(TreeFileSystemBasicRequest) returns (Error) {}
 }
 

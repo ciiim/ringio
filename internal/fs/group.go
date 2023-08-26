@@ -63,7 +63,7 @@ func (g *Group) DeleteFile(spaceKey, base, name string) error {
 		return err
 	}
 	metadata := &Metadata{}
-	unmarshalMetaData(meta, metadata)
+	UnmarshalMetaData(meta, metadata)
 	var wg sync.WaitGroup
 	wg.Add(len(metadata.Blocks))
 	for _, block := range metadata.Blocks {

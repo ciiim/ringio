@@ -17,6 +17,12 @@ type Metadata struct {
 	Blocks   []Fileblock `json:"block_list"`
 }
 
+type MetadataPath struct {
+	Space string `json:"space"`
+	Base  string `json:"base"`
+	Name  string `json:"name"`
+}
+
 type Fileblock struct {
 
 	// Begin from 0
@@ -27,7 +33,7 @@ type Fileblock struct {
 	Size int64  `json:"block_size"`
 }
 
-func newMetaData(filename string, hash string, modTime time.Time, blocks []Fileblock) Metadata {
+func NewMetaData(filename string, hash string, modTime time.Time, blocks []Fileblock) Metadata {
 	m := Metadata{
 		Filename: filename,
 		Hash:     hash,
@@ -45,7 +51,7 @@ func newMetaData(filename string, hash string, modTime time.Time, blocks []Fileb
 	return m
 }
 
-func newFileBlock(host string, size int64, hash string) Fileblock {
+func NewFileBlock(host string, size int64, hash string) Fileblock {
 	return Fileblock{
 		Host: host,
 		Size: size,
@@ -53,14 +59,14 @@ func newFileBlock(host string, size int64, hash string) Fileblock {
 	}
 }
 
-func unmarshalMetaData(data []byte, metadata *Metadata) error {
+func UnmarshalMetaData(data []byte, metadata *Metadata) error {
 	if err := json.Unmarshal(data, metadata); err != nil {
 		return err
 	}
 	return nil
 }
 
-func marshalMetaData(meta *Metadata) ([]byte, error) {
+func MarshalMetaData(meta *Metadata) ([]byte, error) {
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return nil, err

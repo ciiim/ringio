@@ -12,7 +12,7 @@ func TestMetaData(t *testing.T) {
 		newFileBlock("10.0.0.5", 1024, "hash3"),
 	}
 	meta := newMetaData("test", "testhash1", time.Now(), blocksFileList)
-	data, err := marshalMetaData(&meta)
+	data, err := MarshalMetaData(&meta)
 	if err != nil {
 		t.Error(err)
 		return

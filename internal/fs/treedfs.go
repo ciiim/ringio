@@ -2,6 +2,7 @@ package fs
 
 import (
 	"log"
+	"sync"
 
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
@@ -134,10 +135,62 @@ func (dt *TreeDFileSystem) GetMetadata(space, base, name string) ([]byte, error)
 	return dt.remote.getMetadata(ctx, pi, space, base, name)
 }
 
-func (dt *TreeDFileSystem) PutMetadata(space, base, name, hash string, data []byte) (string, error) {
+func (dt *TreeDFileSystem) HasSameMetadata(hash string) (MetadataPath, bool) {
+	path, has := dt.treeFileSystem.HasSameMetadata(hash)
+	if has {
+		return path, has
+	}
+	//向所有节点查询
+	list := dt.self.PList()
+	if len(list) == 1 {
+		return MetadataPath{}, false
+	}
+	respChan := make(chan bool, len(list)-1)
+	wgDoneChan := make(chan struct{})
+	var resPath MetadataPath
+	var wg sync.WaitGroup
+	wg.Add(len(list) - 1)
+	go func() {
+		wg.Wait()
+		wgDoneChan <- struct{}{}
+	}()
+	for _, pi := range list {
+		go func(pi_ peers.PeerInfo) {
+			if dt.self.info.Equal(pi_) {
+				return
+			}
+			ctx, cancel := ctxWithTimeout()
+			defer cancel()
+			path, has = dt.remote.hasSameMetadata(ctx, pi_, hash)
+			resPath = path
+			respChan <- has
+			wg.Done()
+		}(pi)
+	}
+	for {
+		select {
+		case has := <-respChan:
+			if has {
+				close(respChan)
+				close(wgDoneChan)
+				return resPath, true
+			}
+		case <-wgDoneChan:
+			close(respChan)
+			close(wgDoneChan)
+			return MetadataPath{}, false
+		}
+	}
+}
+
+func (dt *TreeDFileSystem) HasSameMetadataLocal(hash string) (MetadataPath, bool) {
+	return dt.treeFileSystem.HasSameMetadata(hash)
+}
+
+func (dt *TreeDFileSystem) PutMetadata(space, base, name, hash string, data []byte) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return "", ErrSpaceNotFound
+		return ErrSpaceNotFound
 	}
 	if dt.self.info.Equal(pi) {
 		return dt.treeFileSystem.PutMetadata(space, base, name, hash, data)
@@ -146,17 +199,17 @@ func (dt *TreeDFileSystem) PutMetadata(space, base, name, hash string, data []by
 	defer cancel()
 	return dt.remote.putMetadata(ctx, pi, space, base, name, data)
 }
-func (dt *TreeDFileSystem) DeleteMetadata(space, base, name string) error {
+func (dt *TreeDFileSystem) DeleteMetadata(space, base, name, hash string) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
 		return ErrSpaceNotFound
 	}
 	if dt.self.info.Equal(pi) {
-		return dt.treeFileSystem.DeleteMetadata(space, base, name)
+		return dt.treeFileSystem.DeleteMetadata(space, base, name, hash)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
-	return dt.remote.deleteMetadata(ctx, pi, space, base, name)
+	return dt.remote.deleteMetadata(ctx, pi, space, base, name, hash)
 }
 
 func (dt *TreeDFileSystem) Peer() peers.Peer {

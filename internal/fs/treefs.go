@@ -1,6 +1,8 @@
 package fs
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -175,47 +177,84 @@ func (t *treeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
 
 }
 
-func (t *treeFileSystem) PutMetadata(space, base, name, fileHash string, data []byte) (string, error) {
-
-	dataPath, err := t.levelDB.Get([]byte(fileHash), nil)
-	if err == nil {
-		return string(dataPath), ErrFileExist
-	}
-
-	sp := t.GetSpace(space)
-	if sp == nil {
-		return "", ErrSpaceNotFound
-	}
-
-	err = sp.storeMetaData(base, name, data)
+func (t *treeFileSystem) HasSameMetadata(hash string) (MetadataPath, bool) {
+	data, err := t.levelDB.Get([]byte(hash), nil)
 	if err != nil {
-		return "", err
+		return MetadataPath{}, false
 	}
-	err = t.levelDB.Put([]byte(fileHash), []byte(filepath.Join(space, base, name)), nil)
-	return filepath.Join(space, base, name), err
-
+	paths, ok := stringToMetadataPath(string(data))
+	if !ok {
+		return MetadataPath{}, false
+	}
+	return paths, true
 }
-func (t *treeFileSystem) DeleteMetadata(space, base, name string) error {
+
+func (t *treeFileSystem) PutMetadata(space, base, name, fileHash string, data []byte) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
 	}
-	data, err := sp.getMetadata(base, name)
-	if err != nil {
-		return err
-	}
-	metadata := &Metadata{}
-	unmarshalMetaData(data, metadata)
-	err = sp.deleteMetaData(base, name)
-	if err != nil {
-		return err
-	}
-	err = t.levelDB.Delete([]byte(metadata.Hash), nil)
-	if err != nil {
-		return err
-	}
-	return nil
 
+	err := sp.storeMetaData(base, name, data)
+	if err != nil {
+		return err
+	}
+	err = t.addSameHashFileToDB(MetadataPath{Space: space, Base: base, Name: name}, fileHash)
+	return err
+
+}
+func (t *treeFileSystem) DeleteMetadata(space, base, name, hash string) error {
+	sp := t.GetSpace(space)
+	if sp == nil {
+		return ErrSpaceNotFound
+	}
+	err := sp.deleteMetaData(base, name)
+	if err != nil {
+		return err
+	}
+	return t.delSameHashFileFromDB(hash)
+
+}
+
+func (t *treeFileSystem) addSameHashFileToDB(metadataPath MetadataPath, hash string) error {
+	paths, err := t.levelDB.Get([]byte(hash), nil)
+	if !errors.Is(err, leveldb.ErrNotFound) {
+		return err
+	}
+	var m []MetadataPath
+	err = json.Unmarshal(paths, m)
+	if err != nil {
+		return err
+	}
+	m = append(m, metadataPath)
+	paths, err = json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return t.levelDB.Put([]byte(hash), paths, nil)
+}
+
+func (t *treeFileSystem) delSameHashFileFromDB(hash string) error {
+	paths, err := t.levelDB.Get([]byte(hash), nil)
+	if !errors.Is(err, leveldb.ErrNotFound) {
+		return err
+	}
+	var m []MetadataPath
+	err = json.Unmarshal(paths, m)
+	if err != nil {
+		return err
+	}
+	for i, v := range m {
+		if v.Name == hash {
+			m = append(m[:i], m[i+1:]...)
+			break
+		}
+	}
+	paths, err = json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return t.levelDB.Put([]byte(hash), paths, nil)
 }
 
 func (t *treeFileSystem) Close() error {
@@ -223,7 +262,7 @@ func (t *treeFileSystem) Close() error {
 }
 
 func (tf TreeFile) Metadata() []byte {
-	data, _ := marshalMetaData(&tf.metadata)
+	data, _ := MarshalMetaData(&tf.metadata)
 	return data
 }
 
