@@ -175,9 +175,9 @@ func (s *Space) ModifyCap(cap Byte) error {
 	return s.save()
 }
 
-func (s *Space) willFull(delta int64) bool {
-	return s.occupy+delta > s.capacity
-}
+// func (s *Space) willFull(delta int64) bool {
+// 	return s.occupy+delta > s.capacity
+// }
 
 func (s *Space) getFullPath(base, target string) string {
 	if strings.Contains(base, BASE_DIR) {

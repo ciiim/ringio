@@ -79,18 +79,6 @@ func (r *rpcTDFSServer) GetMetadata(ctx context.Context, req *fspb.TreeFileSyste
 	return &fspb.BytesData{Data: data}, nil
 }
 
-func (r *rpcTDFSServer) HasSameMetadata(ctx context.Context, req *fspb.HasSameMetadataRequest) (*fspb.HasSameMetadataResponse, error) {
-	path, ok := r.fs.HasSameMetadataLocal(req.Hash)
-	return &fspb.HasSameMetadataResponse{
-		Info: &fspb.TreeFileSystemBasicRequest{
-			Space: path.Space,
-			Base:  path.Base,
-			Name:  path.Name,
-		},
-		Has: ok,
-	}, nil
-}
-
 func (r *rpcTDFSServer) PutMetadata(ctx context.Context, req *fspb.PutMetadataRequest) (*fspb.Error, error) {
 	err := r.fs.PutMetadata(req.Src.Space, req.Src.Base, req.Src.Name, req.Src.Hash, req.Metadata)
 	if err != nil {

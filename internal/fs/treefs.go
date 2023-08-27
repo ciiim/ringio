@@ -1,8 +1,6 @@
 package fs
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -12,9 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ciiim/cloudborad/internal/database"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const (
@@ -25,8 +21,6 @@ type DirEntry = fs.DirEntry
 
 type treeFileSystem struct {
 	rootPath string
-
-	levelDB *leveldb.DB
 }
 
 type TreeFile struct {
@@ -57,14 +51,8 @@ func newTreeFileSystem(rootPath string) *treeFileSystem {
 	if err != nil {
 		panic("mkdir error:" + err.Error())
 	}
-	metadataHashDBName := "metadata_hash"
-	db, err := database.NewLevelDB(filepath.Join(rootPath + "/" + metadataHashDBName))
-	if err != nil {
-		panic("leveldb init error:" + err.Error())
-	}
 	t := &treeFileSystem{
 		rootPath: rootPath,
-		levelDB:  db,
 	}
 	return t
 }
@@ -177,30 +165,13 @@ func (t *treeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
 
 }
 
-func (t *treeFileSystem) HasSameMetadata(hash string) (MetadataPath, bool) {
-	data, err := t.levelDB.Get([]byte(hash), nil)
-	if err != nil {
-		return MetadataPath{}, false
-	}
-	paths, ok := stringToMetadataPath(string(data))
-	if !ok {
-		return MetadataPath{}, false
-	}
-	return paths, true
-}
-
 func (t *treeFileSystem) PutMetadata(space, base, name, fileHash string, data []byte) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
 	}
 
-	err := sp.storeMetaData(base, name, data)
-	if err != nil {
-		return err
-	}
-	err = t.addSameHashFileToDB(MetadataPath{Space: space, Base: base, Name: name}, fileHash)
-	return err
+	return sp.storeMetaData(base, name, data)
 
 }
 func (t *treeFileSystem) DeleteMetadata(space, base, name, hash string) error {
@@ -208,57 +179,11 @@ func (t *treeFileSystem) DeleteMetadata(space, base, name, hash string) error {
 	if sp == nil {
 		return ErrSpaceNotFound
 	}
-	err := sp.deleteMetaData(base, name)
-	if err != nil {
-		return err
-	}
-	return t.delSameHashFileFromDB(hash)
-
-}
-
-func (t *treeFileSystem) addSameHashFileToDB(metadataPath MetadataPath, hash string) error {
-	paths, err := t.levelDB.Get([]byte(hash), nil)
-	if !errors.Is(err, leveldb.ErrNotFound) {
-		return err
-	}
-	var m []MetadataPath
-	err = json.Unmarshal(paths, m)
-	if err != nil {
-		return err
-	}
-	m = append(m, metadataPath)
-	paths, err = json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return t.levelDB.Put([]byte(hash), paths, nil)
-}
-
-func (t *treeFileSystem) delSameHashFileFromDB(hash string) error {
-	paths, err := t.levelDB.Get([]byte(hash), nil)
-	if !errors.Is(err, leveldb.ErrNotFound) {
-		return err
-	}
-	var m []MetadataPath
-	err = json.Unmarshal(paths, m)
-	if err != nil {
-		return err
-	}
-	for i, v := range m {
-		if v.Name == hash {
-			m = append(m[:i], m[i+1:]...)
-			break
-		}
-	}
-	paths, err = json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return t.levelDB.Put([]byte(hash), paths, nil)
+	return sp.deleteMetaData(base, name)
 }
 
 func (t *treeFileSystem) Close() error {
-	return t.levelDB.Close()
+	return nil
 }
 
 func (tf TreeFile) Metadata() []byte {

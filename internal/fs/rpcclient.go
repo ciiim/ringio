@@ -201,26 +201,6 @@ func (r *rpcTreeClient) getMetadata(ctx context.Context, pi peers.PeerInfo, spac
 	return resp.Data, nil
 }
 
-func (r *rpcTreeClient) hasSameMetadata(ctx context.Context, pi peers.PeerInfo, hash string) (MetadataPath, bool) {
-	log.Printf("[RPC Client] HasSameMetadata from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return MetadataPath{}, false
-	}
-	defer conn.Close()
-
-	client := fspb.NewTreeFileSystemServiceClient(conn)
-	resp, err := client.HasSameMetadata(ctx, &fspb.HasSameMetadataRequest{Hash: hash})
-	if err != nil {
-		return MetadataPath{}, false
-	}
-	return MetadataPath{
-		Space: resp.Info.Space,
-		Base:  resp.Info.Base,
-		Name:  resp.Info.Name,
-	}, resp.Has
-}
-
 func (r *rpcTreeClient) putMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string, data []byte) error {
 	log.Printf("[RPC Client] PutMetadata to %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))

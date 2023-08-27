@@ -123,7 +123,7 @@ Space API
 */
 
 func (a *ApiServer) NewBoard(ctx *gin.Context) {
-	err := a.fileServer.Group.NewBorad(ctx.Param("key"))
+	err := a.fileServer.NewBoard(ctx.Param("key"))
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
 			"msg":     err.Error(),

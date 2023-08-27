@@ -47,8 +47,6 @@ type TreeDFileSystemI interface {
 	GetDirSub(space, base, name string) ([]SubInfo, error)
 
 	GetMetadata(space, base, name string) ([]byte, error)
-	HasSameMetadata(hash string) (MetadataPath, bool)
-	HasSameMetadataLocal(hash string) (MetadataPath, bool)
 	PutMetadata(space, base, name, hash string, data []byte) error
 	DeleteMetadata(space, base, name, hash string) error
 
