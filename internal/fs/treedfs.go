@@ -18,15 +18,6 @@ type TreeDFileSystem struct {
 	self   DPeer
 }
 
-type DTreeFile struct {
-	data []byte
-	info TreeDFileInfo
-}
-type TreeDFileInfo struct {
-	TreeFileInfo
-	DPeerInfo
-}
-
 var _ TreeDFileSystemI = (*TreeDFileSystem)(nil)
 
 func NewTreeDFileSystem(self DPeer, rootPath string) *TreeDFileSystem {
@@ -161,18 +152,6 @@ func (dt *TreeDFileSystem) DeleteMetadata(space, base, name, hash string) error 
 
 func (dt *TreeDFileSystem) Peer() peers.Peer {
 	return dt.self
-}
-
-func (df DTreeFile) Metadata() []byte {
-	return df.data
-}
-
-func (df DTreeFile) Stat() TreeDFileInfo {
-	return df.info
-}
-
-func (dfi TreeDFileInfo) PeerInfo() peers.PeerInfo {
-	return dfi.DPeerInfo
 }
 
 func (dt *TreeDFileSystem) Serve() {

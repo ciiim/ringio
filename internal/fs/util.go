@@ -18,20 +18,6 @@ func pBFileInfoToHashFileInfo(pb *fspb.HashFileInfo) HashFileInfo {
 	}
 }
 
-func pbFileInfoToTreeFileInfo(pb *fspb.TreeFileInfo) TreeFileInfo {
-	if pb == nil {
-		return TreeFileInfo{}
-	}
-	return TreeFileInfo{
-		path:     pb.BasePath,
-		fileName: pb.FileName,
-		size:     pb.Size,
-		modTime:  pb.ModTime.AsTime(),
-		isDir:    pb.IsDir,
-		subDir:   pbSubsToSubs(pb.SubFiles.SubInfo),
-	}
-}
-
 func pbSubsToSubs(pb []*fspb.SubInfo) []SubInfo {
 	var subs []SubInfo
 	for _, v := range pb {

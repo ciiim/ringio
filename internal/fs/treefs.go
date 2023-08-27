@@ -8,9 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 const (
@@ -23,22 +20,7 @@ type treeFileSystem struct {
 	rootPath string
 }
 
-type TreeFile struct {
-	metadata Metadata
-	info     TreeFileInfo
-}
-
-type TreeFileInfo struct {
-	fileName string
-	path     string
-	size     int64
-	isDir    bool
-	modTime  time.Time
-	subDir   []SubInfo
-}
-
 var _ TreeFileSystemI = (*treeFileSystem)(nil)
-var _ TreeFileI = (*TreeFile)(nil)
 
 const (
 	DIR_PERFIX = "__DIR__"
@@ -183,45 +165,5 @@ func (t *treeFileSystem) DeleteMetadata(space, base, name, hash string) error {
 }
 
 func (t *treeFileSystem) Close() error {
-	return nil
-}
-
-func (tf TreeFile) Metadata() []byte {
-	data, _ := MarshalMetaData(&tf.metadata)
-	return data
-}
-
-func (tf TreeFile) Stat() TreeFileInfoI {
-	return tf.info
-}
-
-func (tfi TreeFileInfo) Name() string {
-	return tfi.fileName
-}
-
-func (tfi TreeFileInfo) Size() int64 {
-	return tfi.size
-}
-
-func (tfi TreeFileInfo) Path() string {
-	return tfi.path
-}
-
-func (tfi TreeFileInfo) IsDir() bool {
-	return tfi.isDir
-}
-
-func (tfi TreeFileInfo) ModTime() time.Time {
-	return tfi.modTime
-}
-
-func (tfi TreeFileInfo) Sub() []SubInfo {
-	if tfi.IsDir() {
-		return tfi.subDir
-	}
-	return nil
-}
-
-func (tfi TreeFileInfo) PeerInfo() peers.PeerInfo {
 	return nil
 }
