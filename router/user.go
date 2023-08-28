@@ -77,13 +77,14 @@ func (a *ApiServer) LoginByPasswd(c *gin.Context) {
 		})
 		return
 	} else {
-		c.SetCookie("token", token.Token, int(token.Age.Seconds()), "/", "localhost", false, true)
+
+		c.SetCookie("token", token.Token, int(token.Age.Seconds()), "/", c.Request.URL.Hostname(), false, true)
 		c.JSON(http.StatusOK, gin.H{
 			"code":    http.StatusOK,
 			"success": true,
 			"msg":     "登录成功",
 			"data": gin.H{
-				"token": token,
+				"token": token.Token,
 			},
 		})
 		return

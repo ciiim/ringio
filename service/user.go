@@ -87,6 +87,6 @@ func LoginByPasswd(email, passwd string) (Token, bool, error) {
 	if user.Passwd != encryptedPasswd {
 		return Token{}, false, errmsg.ErrWrongPasswd
 	}
-	token := GenerateToken(user.UID, user.NickName, user.PermissionGroup, 0)
+	token := GenerateToken(user.UID, user.NickName, user.PermissionGroup, ExpireTimeMonth)
 	return token, true, nil
 }

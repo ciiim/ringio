@@ -18,6 +18,14 @@ msg: string
 data: gin.H{} or nil
 */
 
+const (
+	apiVersion = "v1"
+)
+
+var (
+	apiBasePath = "/api/" + apiVersion
+)
+
 type ApiServer struct {
 	r          *gin.Engine
 	fileServer *server.Server
@@ -36,9 +44,9 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 		fileServer: fileServer,
 	}
 
-	APIGroup := r.Group("/api/v1")
+	APIGroup := r.Group(apiBasePath)
 	{
-		fsAPIGroup := APIGroup.Group("fs")
+		fsAPIGroup := APIGroup.Group("fs", jwtAuth())
 		{
 			fsAPIGroup.GET("/board", as.GetDir)
 			fsAPIGroup.PUT("/board", as.MkDir)
@@ -64,7 +72,7 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 			authAPIGroup.POST("/verify")
 		}
 
-		adminGroup := as.r.Group("/internal/admin", adminAuth())
+		adminGroup := as.r.Group("/internal/admin", jwtAdminAuth())
 		{
 			as.r.LoadHTMLGlob("server/admin/*")
 
