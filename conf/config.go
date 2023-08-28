@@ -15,11 +15,15 @@ func InitConfig() *viper.Viper {
 	if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 		// Make a default config
 		log.Println("Config file not found, will create one.")
+
 		v.Set("server.server_name", "")
 		v.Set("server.api_server_port", "8080")
 
 		v.Set("conf.use", "")
 		v.Set("debug", false)
+
+		v.Set("database.mysql.datasource", "")
+
 		v.WriteConfigAs("conf/conf.toml")
 		log.Fatalln("Please edit conf/conf.toml and start the program again.")
 	} else if err != nil {

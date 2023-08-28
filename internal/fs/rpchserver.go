@@ -93,9 +93,10 @@ func (r *rpcHDFSServer) PeerSync(ctx context.Context, pi *fspb.PeerInfo) (*fspb.
 	return &fspb.Error{}, nil
 }
 
-func (r *rpcHDFSServer) run(port string) {
+func (r *rpcHDFSServer) serve(port string) {
 	l, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		log.Println("[RPC Server] Listen error:", err)
 		return
 	}
 	fspb.RegisterPeerServiceServer(r.s, r)

@@ -9,13 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func debugApi(r *gin.Engine) {
-	debugGroup := r.Group("/api/debug")
-	{
-		debugGroup.GET("/getblock")
-		debugGroup.PUT("/storeblock")
-	}
-}
+/*
+
+返回格式规定
+code: int
+success: bool
+msg: string
+data: gin.H{} or nil
+*/
 
 type ApiServer struct {
 	r          *gin.Engine
@@ -30,9 +31,6 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 	}
 
 	r := gin.Default()
-	if fs.IsDebug() {
-		debugApi(r)
-	}
 	as := &ApiServer{
 		r:          r,
 		fileServer: fileServer,
@@ -54,10 +52,10 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 		authAPIGroup := APIGroup.Group("auth")
 		{
 			//登录
-			authAPIGroup.POST("/login")
+			authAPIGroup.POST("/login", as.LoginByPasswd)
 
 			//注册
-			authAPIGroup.POST("/register")
+			authAPIGroup.POST("/register", as.Register)
 
 			//登出
 			authAPIGroup.POST("/logout")
@@ -81,22 +79,31 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 	return as
 }
 
+func (a *ApiServer) Run(port string) {
+	a.r.Run(":" + port)
+}
+
 func (a *ApiServer) GetCluster(ctx *gin.Context) {
 	list := a.fileServer.Group.FrontSystem.Peer().PList()
 	dpeerList := fs.PeerInfoListToDpeerInfoList(a.fileServer.Group.FrontSystem.Peer().PList())
 	ctx.JSON(http.StatusOK, gin.H{
-		"meg":      "success",
-		"success":  true,
-		"peernum":  len(list),
-		"peerlist": dpeerList,
+		"code":    http.StatusOK,
+		"meg":     "success",
+		"success": true,
+		"data": gin.H{
+			"peernum":  len(list),
+			"peerlist": dpeerList,
+		},
 	})
 }
 
 func (a *ApiServer) QuitCluster(ctx *gin.Context) {
 	a.fileServer.Quit()
 	ctx.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
 		"msg":     "success",
 		"success": true,
+		"data":    nil,
 	})
 }
 
@@ -106,14 +113,18 @@ func (a *ApiServer) JoinCluster(ctx *gin.Context) {
 	err := a.fileServer.Join(peerName, peerAddr)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     err.Error(),
 			"success": errors.Is(err, nil),
+			"data":    nil,
 		})
 		return
 	} else {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     "success",
 			"success": errors.Is(err, nil),
+			"data":    nil,
 		})
 	}
 }
@@ -126,14 +137,18 @@ func (a *ApiServer) NewBoard(ctx *gin.Context) {
 	err := a.fileServer.NewBoard(ctx.Param("key"))
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     err.Error(),
 			"success": errors.Is(err, nil),
+			"data":    nil,
 		})
 		return
 	} else {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     "success",
 			"success": errors.Is(err, nil),
+			"data":    nil,
 		})
 	}
 
@@ -149,12 +164,14 @@ func (a *ApiServer) MkDir(ctx *gin.Context) {
 	err := a.fileServer.Group.FrontSystem.MakeDir(key, base, dirName)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     err.Error(),
 			"success": errors.Is(err, nil),
 		})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
 		"msg":     "success",
 		"success": errors.Is(err, nil),
 	})
@@ -170,15 +187,21 @@ func (a *ApiServer) GetDir(ctx *gin.Context) {
 	subs, err := a.fileServer.Group.FrontSystem.GetDirSub(key, base, dirName)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     err.Error(),
 			"success": errors.Is(err, nil),
-			"sub":     nil,
+			"data": gin.H{
+				"sub": nil,
+			},
 		})
 	} else {
 		ctx.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusOK,
 			"msg":     "success",
 			"success": errors.Is(err, nil),
-			"sub":     subs,
+			"data": gin.H{
+				"sub": subs,
+			},
 		})
 	}
 

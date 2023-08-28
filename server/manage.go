@@ -15,7 +15,7 @@ func (s *Server) AddPeer(name, addr string) {
 }
 
 func (s *Server) Join(peerName, peerAddr string) error {
-	err := s.Group.Join(peerName, peerAddr)
+	err := s.JoinCluster(peerName, peerAddr)
 	if err != nil {
 		return err
 	}
@@ -24,7 +24,7 @@ func (s *Server) Join(peerName, peerAddr string) error {
 }
 
 func (s *Server) Quit() {
-	s.Group.Quit()
+	s.QuitCluster()
 }
 
 func (s *Server) Close() error {

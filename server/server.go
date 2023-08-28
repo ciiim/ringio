@@ -40,8 +40,8 @@ func NewServer(groupName, serverName, addr string) *Server {
 		addr = GetIP()
 	}
 	log.Printf("[Server] New server <%s>-<%s>", serverName, addr)
-	ffs := fs.NewTreeDFileSystem(*fs.NewDPeer("front0_"+serverName+"_"+groupName, fs.WithPort(addr, fs.RPC_TDFS_PORT), 20, nil), "./front0_"+serverName+"_"+groupName)
-	sfs := fs.NewDFS(*fs.NewDPeer("store0_"+serverName+"_"+groupName, fs.WithPort(addr, fs.RPC_HDFS_PORT), 20, nil), "./store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
+	ffs := fs.NewTreeDFileSystem(*fs.NewDPeer("front0_"+serverName+"_"+groupName, fs.WithPort(addr, fs.RPC_TDFS_PORT), 20, nil), "./_fs_/front0_"+serverName+"_"+groupName)
+	sfs := fs.NewDFS(*fs.NewDPeer("store0_"+serverName+"_"+groupName, fs.WithPort(addr, fs.RPC_HDFS_PORT), 20, nil), "./_fs_/store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
 	if ffs == nil || sfs == nil {
 		log.Fatal("New server failed")
 	}
@@ -53,7 +53,7 @@ func NewServer(groupName, serverName, addr string) *Server {
 	return server
 }
 
-func (s *Server) StartServer(addr string, apiServiceEnable bool) {
+func (s *Server) StartServer() {
 	s.Group.Serve()
 }
 
@@ -158,28 +158,47 @@ func (s *Server) DeleteBoard(space string) error {
 	return s.Group.FrontSystem.DeleteSpace(space)
 }
 
-func (s *Server) JoinCluster(clusterMemberPeer peers.PeerInfo) error {
-	//transaction start
-	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, clusterMemberPeer)
-	if err != nil {
-		//rollback
-		return err
-	}
-	err = s.Group.StoreSystem.Peer().PActionTo(peers.P_ACTION_JOIN, clusterMemberPeer)
-	if err != nil {
-		//rollback
-		return err
-	}
-	list, err := s.Group.FrontSystem.Peer().GetPeerListFromPeer(clusterMemberPeer)
-	if err != nil {
-		//rollback
-		return err
-	}
-	//transaction end
-	s.Group.FrontSystem.Peer().PAdd(list...)
-	s.Group.StoreSystem.Peer().PAdd(list...)
-	return nil
+func (s *Server) JoinCluster(name, addr string) error {
+	//boradcast to group and get all peers of the group
 
+	frontDest := fs.NewDPeerInfo(name, fs.WithPort(addr, fs.RPC_TDFS_PORT))
+	storeDest := fs.NewDPeerInfo(name, fs.WithPort(addr, fs.RPC_HDFS_PORT))
+
+	//Join Cluster
+	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontDest)
+	if err != nil {
+		return err
+	}
+
+	// Get List from cluster
+	peerList, err := s.Group.FrontSystem.Peer().GetPeerListFromPeer(frontDest)
+	if err != nil {
+		return err
+	}
+
+	//Add to peer map
+	for _, peer := range peerList {
+		_ = s.Group.FrontSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
+	}
+
+	//Join Cluster
+	err = s.Group.StoreSystem.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
+	if err != nil {
+		return err
+	}
+
+	// Get List from cluster
+	peerList, err = s.Group.StoreSystem.Peer().GetPeerListFromPeer(storeDest)
+	if err != nil {
+		return err
+	}
+
+	//Add to peer map
+	for _, peer := range peerList {
+		_ = s.Group.StoreSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
+	}
+
+	return nil
 }
 
 func (s *Server) QuitCluster() error {

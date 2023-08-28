@@ -6,14 +6,15 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-const (
-	dataSource = ""
+var (
+	MysqlDB *sql.DB
 )
 
-func NewMysql() *sql.DB {
+func InitMysql(dataSource string) error {
 	db, err := sql.Open("mysql", dataSource)
 	if err != nil {
-		return nil
+		return err
 	}
-	return db
+	MysqlDB = db
+	return nil
 }

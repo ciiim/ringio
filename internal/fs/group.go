@@ -76,58 +76,6 @@ func (g *Group) PeerList() []DPeerInfo {
 	return peers
 }
 
-/*
-pi - one of the peer info in the group
-*/
-func (g *Group) Join(name, addr string) error {
-
-	//boradcast to group and get all peers of the group
-
-	frontDest := NewDPeerInfo(name, WithPort(addr, RPC_TDFS_PORT))
-	storeDest := NewDPeerInfo(name, WithPort(addr, RPC_HDFS_PORT))
-
-	//Join Cluster
-	err := g.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontDest)
-	if err != nil {
-		return err
-	}
-
-	// Get List from cluster
-	peerList, err := g.FrontSystem.Peer().GetPeerListFromPeer(frontDest)
-	if err != nil {
-		return err
-	}
-
-	//Add to peer map
-	for _, peer := range peerList {
-		_ = g.FrontSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
-	}
-
-	//Join Cluster
-	err = g.StoreSystem.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
-	if err != nil {
-		return err
-	}
-
-	// Get List from cluster
-	peerList, err = g.StoreSystem.Peer().GetPeerListFromPeer(storeDest)
-	if err != nil {
-		return err
-	}
-
-	//Add to peer map
-	for _, peer := range peerList {
-		_ = g.StoreSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
-	}
-
-	return nil
-}
-
-func (g *Group) Quit() {
-	g.FrontSystem.Peer().PSync(g.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
-	g.StoreSystem.Peer().PSync(g.FrontSystem.Peer().Info(), peers.P_ACTION_QUIT)
-}
-
 func (g *Group) SyncPeer(pi peers.PeerInfo, action peers.PeerActionType) error {
 	err := g.FrontSystem.Peer().PSync(pi, action)
 	if err != nil {

@@ -187,5 +187,5 @@ func (dfi HashDFileInfo) PeerInfo() peers.PeerInfo {
 
 func (d *HashDFileSystem) Serve() {
 	log.Println("[HashDFileSystem] Serve on", d.self.PAddr())
-	newRPCHDFSServer(d).run(RPC_HDFS_PORT)
+	newRPCHDFSServer(d).serve(RPC_HDFS_PORT)
 }

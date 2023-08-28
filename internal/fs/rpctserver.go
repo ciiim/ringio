@@ -122,8 +122,8 @@ func (r *rpcTDFSServer) PeerSync(ctx context.Context, pi *fspb.PeerInfo) (*fspb.
 	return &fspb.Error{}, nil
 }
 
-func (r *rpcTDFSServer) Serve(port string) {
-	lis, err := net.Listen("tcp", port)
+func (r *rpcTDFSServer) serve(port string) {
+	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
