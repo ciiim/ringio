@@ -1,40 +1,92 @@
 package main
 
 import (
+	"log"
+	"time"
+
 	"github.com/ciiim/cloudborad/conf"
 	"github.com/ciiim/cloudborad/internal/database"
 	"github.com/ciiim/cloudborad/router"
 	"github.com/ciiim/cloudborad/server"
+	"github.com/ciiim/cloudborad/service"
 )
 
 func main() {
-	ip := server.GetIP()
+
 	v := conf.InitConfig()
 
-	debug := v.GetBool("debug")
-	serverName := v.GetString("server.file_server_name")
-	port := v.GetString("server.api_server_port")
-	apiEnable := v.GetBool("server.api_server_enable")
-	nodelist := conf.GetNodes(v)
+	//mysql
+
 	mysqlDataSource := v.GetString("database.mysql.datasource")
 
 	if err := database.InitMysql(mysqlDataSource); err != nil {
 		panic("Init Mysql Error: " + err.Error())
 	}
+	log.Println("[Init] mysql is connected.")
 
-	s := server.NewServer("group", serverName, ip)
+	//redis
+
+	redisEnable := v.GetBool("database.redis.enable")
+	if redisEnable {
+		redisHost := v.GetString("database.redis.host")
+		redisPort := v.GetString("database.redis.port")
+		redisPassword := v.GetString("database.redis.password")
+		if err := database.InitRedis(redisHost+":"+redisPort, redisPassword, 1); err != nil {
+			panic("Init Redis Error: " + err.Error())
+		}
+		log.Println("[Init] redis is connected.")
+	}
+
+	//file server
+
+	nodelist := conf.GetNodes(v)
+	serverName := v.GetString("server.file_server_name")
+
+	s := server.NewServer("group", serverName, server.GetIP())
 
 	for _, node := range nodelist {
 		s.AddPeer(node["name"], node["addr"])
 	}
 
+	//debug
+
+	debug := v.GetBool("debug")
+
 	if debug {
 		s.DebugOn()
 	}
+
+	//api server
+
+	apiEnable := v.GetBool("server.api_server_enable")
+
 	if apiEnable {
-		r := router.InitApiServer(s)
+		log.Println("[Init] api server enable.")
+
+		port := v.GetString("server.api_server_port")
+
+		smtpHost := v.GetString("smtp.host")
+		smtpPort := v.GetString("smtp.port")
+		email := v.GetString("smtp.email")
+		password := v.GetString("smtp.password")
+		if smtpHost == "" || smtpPort == "" || email == "" || password == "" {
+			panic("smtp config error")
+		}
+		serv := service.NewService(s)
+		serv.SetEmailConfig(service.EmailConfig{
+			Smtp: &service.SmtpConfig{
+				Host:     smtpHost,
+				Port:     smtpPort,
+				Email:    email,
+				Password: password,
+			},
+			VerifyCodeLen:        6,
+			VerifyCodeExpireTime: 2 * time.Minute,
+		})
+
+		r := router.InitApiServer(serv)
 		go r.Run(port)
 	}
-
+	log.Println("[Init] server is starting...")
 	s.StartServer()
 }

@@ -6,6 +6,7 @@ import (
 )
 
 type SubInfo struct {
+	Index   int       `json:"index"`
 	Name    string    `json:"dir_name"`
 	IsDir   bool      `json:"is_dir"`
 	ModTime time.Time `json:"mod_time"`
@@ -13,9 +14,10 @@ type SubInfo struct {
 
 func DirEntryToSubInfo(de []fs.DirEntry) []SubInfo {
 	var subList []SubInfo
-	for _, v := range de {
+	for i, v := range de {
 		info, _ := v.Info()
 		subList = append(subList, SubInfo{
+			Index:   i,
 			Name:    v.Name(),
 			IsDir:   v.IsDir(),
 			ModTime: info.ModTime(),

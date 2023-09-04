@@ -6,4 +6,5 @@ var (
 	ErrDatabaseInternalError = fmt.Errorf("database internal error")
 	ErrQueryUserFailed       = fmt.Errorf("query user failed")
 	ErrInsertUserFailed      = fmt.Errorf("insert user failed")
+	ErrUpdateUserFailed      = fmt.Errorf("update user failed")
 )

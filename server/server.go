@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 //TODO: 事务(transaction)系统，提供事务接口，支持事务回滚，实现文件下载、上传、删除的事务
@@ -40,8 +39,8 @@ func NewServer(groupName, serverName, addr string) *Server {
 		addr = GetIP()
 	}
 	log.Printf("[Server] New server <%s>-<%s>", serverName, addr)
-	ffs := fs.NewTreeDFileSystem(*fs.NewDPeer("front0_"+serverName+"_"+groupName, fs.WithPort(addr, fs.RPC_TDFS_PORT), 20, nil), "./_fs_/front0_"+serverName+"_"+groupName)
-	sfs := fs.NewDFS(*fs.NewDPeer("store0_"+serverName+"_"+groupName, fs.WithPort(addr, fs.RPC_HDFS_PORT), 20, nil), "./_fs_/store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
+	ffs := fs.NewTreeDFileSystem(*fs.NewDPeer("front0_"+serverName+"_"+groupName, addr, 20, nil), "./_fs_/front0_"+serverName+"_"+groupName)
+	sfs := fs.NewDFS(*fs.NewDPeer("store0_"+serverName+"_"+groupName, addr, 20, nil), "./_fs_/store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
 	if ffs == nil || sfs == nil {
 		log.Fatal("New server failed")
 	}
@@ -131,7 +130,21 @@ func (s *Server) GetFile(space, base, name string) {
 }
 
 func (s *Server) DeleteFile(space, base, name string) {
+	//获取文件元数据
+	metadataBytes, err := s.Group.FrontSystem.GetMetadata(space, base, name)
+	if err != nil {
+		log.Printf("[Server] DeleteFile failed: %v", err)
+		return
+	}
+	metadata := &fs.Metadata{}
+	fs.UnmarshalMetaData(metadataBytes, metadata)
+	//删除文件分片
+	for _, v := range metadata.Blocks {
+		s.Group.StoreSystem.Delete(v.Hash)
+	}
 
+	//删除文件元数据
+	s.Group.FrontSystem.DeleteMetadata(space, base, name, metadata.Hash)
 }
 
 func (s *Server) MakeDir(space, base, name string) error {
@@ -143,6 +156,7 @@ func (s *Server) RenameDir(space, base, name, newName string) error {
 }
 
 func (s *Server) DeleteDir(space, base, name string) error {
+	//TODO 删除文件夹时，需要删除文件夹内所有文件
 	return s.Group.FrontSystem.DeleteDir(space, base, name)
 }
 
@@ -150,64 +164,10 @@ func (s *Server) GetDirSub(space, base, name string) ([]fs.SubInfo, error) {
 	return s.Group.FrontSystem.GetDirSub(space, base, name)
 }
 
-func (s *Server) NewBoard(space string) error {
-	return s.Group.FrontSystem.NewSpace(space, fs.GB)
+func (s *Server) NewBoard(space string, cap fs.Byte) error {
+	return s.Group.FrontSystem.NewSpace(space, cap)
 }
 
 func (s *Server) DeleteBoard(space string) error {
 	return s.Group.FrontSystem.DeleteSpace(space)
-}
-
-func (s *Server) JoinCluster(name, addr string) error {
-	//boradcast to group and get all peers of the group
-
-	frontDest := fs.NewDPeerInfo(name, fs.WithPort(addr, fs.RPC_TDFS_PORT))
-	storeDest := fs.NewDPeerInfo(name, fs.WithPort(addr, fs.RPC_HDFS_PORT))
-
-	//Join Cluster
-	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontDest)
-	if err != nil {
-		return err
-	}
-
-	// Get List from cluster
-	peerList, err := s.Group.FrontSystem.Peer().GetPeerListFromPeer(frontDest)
-	if err != nil {
-		return err
-	}
-
-	//Add to peer map
-	for _, peer := range peerList {
-		_ = s.Group.FrontSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
-	}
-
-	//Join Cluster
-	err = s.Group.StoreSystem.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
-	if err != nil {
-		return err
-	}
-
-	// Get List from cluster
-	peerList, err = s.Group.StoreSystem.Peer().GetPeerListFromPeer(storeDest)
-	if err != nil {
-		return err
-	}
-
-	//Add to peer map
-	for _, peer := range peerList {
-		_ = s.Group.StoreSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
-	}
-
-	return nil
-}
-
-func (s *Server) QuitCluster() error {
-	list := s.Group.FrontSystem.Peer().PList()
-
-	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_QUIT, list...)
-	if err != nil {
-		return err
-	}
-	return s.Group.StoreSystem.Peer().PActionTo(peers.P_ACTION_QUIT, list...)
-
 }

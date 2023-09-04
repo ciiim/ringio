@@ -1,11 +1,11 @@
 package router
 
 import (
-	"errors"
-	"net/http"
+	"log"
 
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/server"
+	"github.com/ciiim/cloudborad/service"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,6 +18,15 @@ msg: string
 data: gin.H{} or nil
 */
 
+var JSON_RETURN = func(code int, success bool, msg string, data gin.H) gin.H {
+	return gin.H{
+		"code":    code,
+		"success": success,
+		"msg":     msg,
+		"data":    data,
+	}
+}
+
 const (
 	apiVersion = "v1"
 )
@@ -27,11 +36,11 @@ var (
 )
 
 type ApiServer struct {
-	r          *gin.Engine
-	fileServer *server.Server
+	r       *gin.Engine
+	service *service.Service
 }
 
-func InitApiServer(fileServer *server.Server) *ApiServer {
+func InitApiServer(service *service.Service) *ApiServer {
 	if fs.IsDebug() {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -39,28 +48,39 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 	}
 
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"PUT", "PATCH", "POST", "GET", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
+	}))
 	as := &ApiServer{
-		r:          r,
-		fileServer: fileServer,
+		r:       r,
+		service: service,
 	}
 
 	APIGroup := r.Group(apiBasePath)
 	{
-		fsAPIGroup := APIGroup.Group("fs", jwtAuth())
+		fsAPIGroup := APIGroup.Group("fs", as.jwtAuth())
 		{
-			fsAPIGroup.GET("/board", as.GetDir)
-			fsAPIGroup.PUT("/board", as.MkDir)
-			fsAPIGroup.PUT("/board/:key", as.NewBoard)
+			fsAPIGroup.GET("/board/list", as.GetAllBoardBasic)
 
-			fsAPIGroup.GET("/cluster", as.GetCluster)
-			fsAPIGroup.POST("/cluster", as.JoinCluster)
-			fsAPIGroup.DELETE("/cluster", as.QuitCluster)
+			fsAPIGroup.GET("/board/sub", as.GetBoardSub)
+
+			fsAPIGroup.POST("/board/:space", as.MakeDir)
+			fsAPIGroup.PUT("/board/:space", as.RenameDir)
+			fsAPIGroup.DELETE("/board/:space", as.DeleteDir)
+
+			fsAPIGroup.POST("/board", as.NewBoard)
+			fsAPIGroup.PUT("/board", as.UpdateBoard)
+			fsAPIGroup.DELETE("/board", as.DeleteBoard)
+
 		}
 
 		authAPIGroup := APIGroup.Group("auth")
 		{
 			//登录
-			authAPIGroup.POST("/login", as.LoginByPasswd)
+			authAPIGroup.POST("/login", as.Login)
 
 			//注册
 			authAPIGroup.POST("/register", as.Register)
@@ -68,19 +88,28 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 			//登出
 			authAPIGroup.POST("/logout")
 
-			//使用邮箱激活验证账号
-			authAPIGroup.POST("/verify")
+			//修改密码
+
+			authAPIGroup.POST("/reset-send", as.SendResetEmail)
+
+			authAPIGroup.POST("/reset", as.ResetPasswd)
+
+			authAPIGroup.POST("/check-reset-token", as.CheckResetToken)
+
+			//发送验证码
+			authAPIGroup.POST("/email-verify-code", as.SendVerifyCodeEmail)
 		}
 
-		adminGroup := as.r.Group("/internal/admin", jwtAdminAuth())
+		adminGroup := as.r.Group("/admin", as.jwtAdminAuth())
 		{
 			as.r.LoadHTMLGlob("server/admin/*")
 
 			//简易节点操作
 			adminGroup.GET("/peer", as.AdminPage)
 
-			//关闭节点并退出集群
-			adminGroup.POST("/shutdown", as.Shutdown)
+			adminGroup.GET("/cluster", as.GetCluster)
+			adminGroup.POST("/cluster", as.JoinCluster)
+			adminGroup.DELETE("/cluster", as.QuitCluster)
 		}
 	}
 
@@ -88,129 +117,7 @@ func InitApiServer(fileServer *server.Server) *ApiServer {
 }
 
 func (a *ApiServer) Run(port string) {
-	a.r.Run(":" + port)
-}
-
-func (a *ApiServer) GetCluster(ctx *gin.Context) {
-	list := a.fileServer.Group.FrontSystem.Peer().PList()
-	dpeerList := fs.PeerInfoListToDpeerInfoList(a.fileServer.Group.FrontSystem.Peer().PList())
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    http.StatusOK,
-		"meg":     "success",
-		"success": true,
-		"data": gin.H{
-			"peernum":  len(list),
-			"peerlist": dpeerList,
-		},
-	})
-}
-
-func (a *ApiServer) QuitCluster(ctx *gin.Context) {
-	a.fileServer.Quit()
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    http.StatusOK,
-		"msg":     "success",
-		"success": true,
-		"data":    nil,
-	})
-}
-
-func (a *ApiServer) JoinCluster(ctx *gin.Context) {
-	peerName := ctx.PostForm("peerName")
-	peerAddr := ctx.PostForm("peerAddr")
-	err := a.fileServer.Join(peerName, peerAddr)
-	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     err.Error(),
-			"success": errors.Is(err, nil),
-			"data":    nil,
-		})
-		return
-	} else {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     "success",
-			"success": errors.Is(err, nil),
-			"data":    nil,
-		})
+	if err := a.r.Run(":" + port); err != nil {
+		log.Printf("[ApiServer] Run failed: %v", err)
 	}
-}
-
-/*
-Space API
-*/
-
-func (a *ApiServer) NewBoard(ctx *gin.Context) {
-	err := a.fileServer.NewBoard(ctx.Param("key"))
-	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     err.Error(),
-			"success": errors.Is(err, nil),
-			"data":    nil,
-		})
-		return
-	} else {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     "success",
-			"success": errors.Is(err, nil),
-			"data":    nil,
-		})
-	}
-
-}
-
-func (a *ApiServer) MkDir(ctx *gin.Context) {
-	key, _ := ctx.GetQuery("key")
-	base, _ := ctx.GetQuery("base")
-	if base == "root" || base == "" {
-		base = "."
-	}
-	dirName, _ := ctx.GetQuery("dir")
-	err := a.fileServer.Group.FrontSystem.MakeDir(key, base, dirName)
-	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     err.Error(),
-			"success": errors.Is(err, nil),
-		})
-		return
-	}
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    http.StatusOK,
-		"msg":     "success",
-		"success": errors.Is(err, nil),
-	})
-}
-
-func (a *ApiServer) GetDir(ctx *gin.Context) {
-	key, _ := ctx.GetQuery("key")
-	base, _ := ctx.GetQuery("base")
-	if base == "root" {
-		base = "."
-	}
-	dirName, _ := ctx.GetQuery("dir")
-	subs, err := a.fileServer.Group.FrontSystem.GetDirSub(key, base, dirName)
-	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     err.Error(),
-			"success": errors.Is(err, nil),
-			"data": gin.H{
-				"sub": nil,
-			},
-		})
-	} else {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusOK,
-			"msg":     "success",
-			"success": errors.Is(err, nil),
-			"data": gin.H{
-				"sub": subs,
-			},
-		})
-	}
-
 }

@@ -1,41 +1,85 @@
 package router
 
 import (
-	"errors"
 	"net/http"
+	"strings"
 
-	"github.com/ciiim/cloudborad/service"
 	"github.com/gin-gonic/gin"
 )
 
-func jwtAuth() gin.HandlerFunc {
+func GetToken(c *gin.Context) string {
+	token := c.GetHeader("Authorization")
+	//分离Barer和token
+	if len(token) > 7 && strings.ToUpper(token[0:7]) == "BEARER " {
+		token = token[7:]
+	}
+	return token
+}
+
+func (a *ApiServer) jwtAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token, err := c.Request.Cookie("token")
-		if errors.Is(err, http.ErrNoCookie) || token == nil {
-			c.Redirect(302, "/login")
+		token := GetToken(c)
+		if token == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    Auth_Unauthorized,
+				"success": false,
+				"msg":     "未登录",
+				"data":    nil,
+			})
 			return
 		}
-		if ok, _ := service.VerifyToken(token.Value); !ok {
-			c.Redirect(302, "/login")
+		j, err := a.service.ParseToken(token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    Auth_Unauthorized,
+				"success": false,
+				"msg":     "未登录" + err.Error(),
+				"data":    nil,
+			})
+			return
+		}
+		if ok, _ := a.service.VerifyToken(j); !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    Auth_Unauthorized,
+				"success": false,
+				"msg":     "未登录" + err.Error(),
+				"data":    nil,
+			})
 			return
 		}
 		c.Next()
 	}
 }
 
-func jwtAdminAuth() gin.HandlerFunc {
+func (a *ApiServer) jwtAdminAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token, err := c.Request.Cookie("token")
-		if errors.Is(err, http.ErrNoCookie) || token == nil {
-			c.Redirect(302, "/login")
+		token := GetToken(c)
+		if token == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    Auth_Unauthorized,
+				"success": false,
+				"msg":     "未登录",
+				"data":    nil,
+			})
 			return
 		}
-		if ok, _ := service.VerifyToken(token.Value); !ok {
-			c.Redirect(302, "/login")
+		j, err := a.service.ParseToken(token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    Auth_Unauthorized,
+				"success": false,
+				"msg":     "未登录",
+				"data":    nil,
+			})
 			return
 		}
-		if ok, _ := service.VerifyAdmin(token.Value); !ok {
-			c.Redirect(302, "/login")
+		if ok, _ := a.service.VerifyAdmin(j); !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code":    Auth_Unauthorized,
+				"success": false,
+				"msg":     "未登录",
+				"data":    nil,
+			})
 			return
 		}
 		c.Next()
