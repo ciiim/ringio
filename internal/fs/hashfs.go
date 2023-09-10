@@ -178,8 +178,10 @@ func (bfs *hashFileSystem) Delete(key string) error {
 	if err := bfs.deleteFile(bfi); err != nil {
 		return err
 	}
-	if bfs.occupied == 0 {
-		panic("[Delete Panic] Occupied is 0")
+	if bfs.occupied-bfi.Size_ < 0 {
+		log.Println("[Delete Warn] Occupied is 0")
+		//FIXME: Occupied is 0
+
 	}
 	//update Occupied
 	bfs.occupied -= bfi.Size_

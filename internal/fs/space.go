@@ -44,7 +44,8 @@ func (s *Space) deleteMetaData(base, fileName string) error {
 		return err
 	}
 	if s.occupy < size {
-		return ErrInternal
+		log.Println("[Delete Metadata Warn] occupy < size")
+		//FIXME: 严重错误
 	}
 	s.occupy -= int64(size)
 
@@ -66,12 +67,14 @@ func (s *Space) deleteDir(base, fileName string) error {
 	return os.RemoveAll(s.getFullPath(base, fileName))
 }
 
-func (s *Space) getDir(base, fileName string) ([]fs.DirEntry, error) {
+func (s *Space) getDir(base, fileName string) (string, []fs.DirEntry, error) {
 
 	//TODO: 防止访问dir的上级目录
-	return os.ReadDir(s.getFullPath(base, fileName))
-}
+	fullpath := s.getFullPath(base, fileName)
+	dirs, err := os.ReadDir(fullpath)
 
+	return fullpath, dirs, err
+}
 func (s *Space) i_storeMetadata(base, fileName string, metadata []byte, flag int) error {
 	file, err := os.OpenFile(s.getFullPath(base, fileName), flag, 0666)
 	if err != nil {

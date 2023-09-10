@@ -130,11 +130,11 @@ func (t *treeFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error) 
 	if sp == nil {
 		return nil, ErrSpaceNotFound
 	}
-	des, err := sp.getDir(base, name)
+	dirPath, des, err := sp.getDir(base, name)
 	if err != nil {
 		return nil, err
 	}
-	return DirEntryToSubInfo(des), nil
+	return DirEntryToSubInfo(dirPath, des), nil
 
 }
 

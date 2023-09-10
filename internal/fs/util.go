@@ -23,7 +23,7 @@ func pbSubsToSubs(pb []*fspb.SubInfo) []SubInfo {
 	for _, v := range pb {
 		subs = append(subs, SubInfo{
 			Name:    v.Name,
-			IsDir:   v.IsDir,
+			Type:    FILE_TYPE(v.Type),
 			ModTime: v.ModTime.AsTime(),
 		})
 	}
@@ -35,7 +35,7 @@ func subsToPbSubs(subs []SubInfo) []*fspb.SubInfo {
 	for _, v := range subs {
 		pbSubs = append(pbSubs, &fspb.SubInfo{
 			Name:    v.Name,
-			IsDir:   v.IsDir,
+			Type:    string(v.Type),
 			ModTime: timestamppb.New(v.ModTime),
 		})
 	}

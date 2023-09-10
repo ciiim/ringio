@@ -10,7 +10,7 @@ func InitConfig() *viper.Viper {
 	v := viper.New()
 	v.SetConfigName("conf")
 	v.SetConfigType("toml")
-	v.AddConfigPath("./conf")
+	v.AddConfigPath("./")
 	err := v.ReadInConfig()
 	if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 		// Make a default config

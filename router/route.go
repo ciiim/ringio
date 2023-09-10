@@ -61,19 +61,30 @@ func InitApiServer(service *service.Service) *ApiServer {
 
 	APIGroup := r.Group(apiBasePath)
 	{
-		fsAPIGroup := APIGroup.Group("fs", as.jwtAuth())
+		boardAPIGroup := APIGroup.Group("board")
 		{
-			fsAPIGroup.GET("/board/list", as.GetAllBoardBasic)
+			boardAPIGroup.GET("/list", as.GetAllBoardBasic)
 
-			fsAPIGroup.GET("/board/sub", as.GetBoardSub)
+			boardAPIGroup.GET("/sub", as.GetBoardSub)
 
-			fsAPIGroup.POST("/board/:space", as.MakeDir)
-			fsAPIGroup.PUT("/board/:space", as.RenameDir)
-			fsAPIGroup.DELETE("/board/:space", as.DeleteDir)
+			boardAPIGroup.POST("/dir", as.MakeDir)
+			boardAPIGroup.PUT("/dir", as.RenameDir)
+			boardAPIGroup.DELETE("/dir", as.DeleteDir)
 
-			fsAPIGroup.POST("/board", as.NewBoard)
-			fsAPIGroup.PUT("/board", as.UpdateBoard)
-			fsAPIGroup.DELETE("/board", as.DeleteBoard)
+			boardAPIGroup.POST("", as.NewBoard)
+			boardAPIGroup.PUT("", as.UpdateBoard)
+			boardAPIGroup.DELETE("", as.DeleteBoard)
+
+			boardAPIGroup.POST("/pre-upload", as.PreUploadFile)
+			// boardAPIGroup.GET("/upload-status", as.CheckUploadStatus)
+			boardAPIGroup.POST("/upload", as.UploadFile)
+
+			boardAPIGroup.GET("/pre-download", as.PreDownloadFile)
+			boardAPIGroup.GET("/download", as.DownloadChunk)
+			boardAPIGroup.GET("/download/:downloadID", as.DownloadChunkRange)
+			boardAPIGroup.POST("/download-done", as.DownloadFileDone)
+
+			boardAPIGroup.DELETE("/f", as.DeleteFile)
 
 		}
 
@@ -102,7 +113,7 @@ func InitApiServer(service *service.Service) *ApiServer {
 
 		adminGroup := as.r.Group("/admin", as.jwtAdminAuth())
 		{
-			as.r.LoadHTMLGlob("server/admin/*")
+			// as.r.LoadHTMLGlob("server/admin/*")
 
 			//简易节点操作
 			adminGroup.GET("/peer", as.AdminPage)

@@ -24,8 +24,8 @@ func GetIP() string {
 	return ""
 }
 
-func genStoreID() string {
-	timeStr := strconv.Itoa(int(time.Now().UnixMilli()))
+func genTaskID(fileHash string) string {
+	timeStr := strconv.Itoa(int(time.Now().UnixMilli())) + fileHash
 	sum := sha1.Sum([]byte(timeStr))
 	return hex.EncodeToString(sum[:])
 

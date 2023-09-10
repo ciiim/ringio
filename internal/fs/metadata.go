@@ -31,6 +31,8 @@ type Fileblock struct {
 	Host string `json:"block_host"`
 	Hash string `json:"block_hash"`
 	Size int64  `json:"block_size"`
+
+	Offset int64 `json:"block_offset"`
 }
 
 func NewMetaData(filename string, hash string, modTime time.Time, blocks []Fileblock) Metadata {
@@ -41,11 +43,10 @@ func NewMetaData(filename string, hash string, modTime time.Time, blocks []Fileb
 		Blocks:   blocks,
 	}
 	var size int64
-	blockID := int64(0)
-	for i := 0; i < len(blocks); i++ {
-		blocks[i].BlockID = blockID
-		blockID++
-		size += blocks[i].Size
+	for i := 0; i < len(m.Blocks); i++ {
+		m.Blocks[i].BlockID = int64(i)
+		m.Blocks[i].Offset = size
+		size += m.Blocks[i].Size
 	}
 	m.Size = size
 	return m
@@ -57,6 +58,10 @@ func NewFileBlock(host string, size int64, hash string) Fileblock {
 		Size: size,
 		Hash: hash,
 	}
+}
+
+func GetMetadataRealSize(metadata *Metadata) int64 {
+	return metadata.Size
 }
 
 func UnmarshalMetaData(data []byte, metadata *Metadata) error {

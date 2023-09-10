@@ -155,6 +155,6 @@ func (dt *TreeDFileSystem) Peer() peers.Peer {
 }
 
 func (dt *TreeDFileSystem) Serve() {
-	log.Println("[TreeDFileSystem] Serve on", dt.self.PAddr())
+	log.Println("[TreeDFileSystem] Serve on", dt.self.PAddr()+":"+RPC_TDFS_PORT)
 	newRPCTDFSServer(dt).serve(RPC_TDFS_PORT)
 }

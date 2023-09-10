@@ -109,3 +109,7 @@ func (s *Service) DeleteDir(space string, baseDir string, dirName string) error 
 	}
 	return s.fileServer.DeleteDir(space, baseDir, dirName)
 }
+
+func (s *Service) DeleteFile(space, baseDir, fileName string) error {
+	return s.fileServer.DeleteFile(space, baseDir, fileName)
+}

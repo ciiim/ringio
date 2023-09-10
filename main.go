@@ -20,7 +20,7 @@ func main() {
 	mysqlDataSource := v.GetString("database.mysql.datasource")
 
 	if err := database.InitMysql(mysqlDataSource); err != nil {
-		panic("Init Mysql Error: " + err.Error())
+		log.Fatalln("Init Mysql Error: " + err.Error())
 	}
 	log.Println("[Init] mysql is connected.")
 
@@ -32,7 +32,7 @@ func main() {
 		redisPort := v.GetString("database.redis.port")
 		redisPassword := v.GetString("database.redis.password")
 		if err := database.InitRedis(redisHost+":"+redisPort, redisPassword, 1); err != nil {
-			panic("Init Redis Error: " + err.Error())
+			log.Fatalln("Init Redis Error: " + err.Error())
 		}
 		log.Println("[Init] redis is connected.")
 	}

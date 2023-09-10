@@ -9,8 +9,8 @@ import (
 type Byte = int64
 
 const (
-	MB = Byte(1024 * 1024)
-	GB = Byte(1024 * 1024 * 1024)
+	MB = Byte(8 << 17)
+	GB = Byte(8 << 27)
 )
 
 type HashFileI interface {

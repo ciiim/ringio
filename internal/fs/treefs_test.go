@@ -42,7 +42,7 @@ func TestListDir(t *testing.T) {
 	tfs := newTreeFileSystem(trootPath)
 	space := tfs.GetSpace("test")
 	defer space.Close(true)
-	subs, err := space.getDir("", "aaa")
+	_, subs, err := space.getDir("", "aaa")
 	if err != nil {
 		t.Error(err)
 	}
@@ -83,14 +83,14 @@ func TestDelDir(t *testing.T) {
 	tfs := newTreeFileSystem(trootPath)
 	space := tfs.GetSpace("test")
 	defer space.Close(true)
-	des, err := space.getDir("aaa", "bbb")
+	path, des, err := space.getDir("aaa", "bbb")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	subs := DirEntryToSubInfo(des)
+	subs := DirEntryToSubInfo(path, des)
 	for _, sub := range subs {
-		t.Logf("isdir:%v name:%s", sub.IsDir, sub.Name)
+		t.Logf("type:%v name:%s", sub.Type, sub.Name)
 	}
 	err = space.deleteDir("aaa", "ccc")
 	if err != nil {

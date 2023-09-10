@@ -13,16 +13,31 @@ import (
 //TODO: 秒传模块，相同Hash的文件秒传 DONE
 //TODO: 节点强一致性，保证节点信息一致性
 
-type storeBlocks struct {
-	storeID    string
-	space      string
-	base       string
+type downloadTask struct {
+	downloadID string
 	fileName   string
-	hash       string
-	blocks     [][]byte
-	blockDatas []fs.Fileblock
-	nums       int
-	now        int
+	fileSize   int64
+	fileHash   string
+	metadata   *fs.Metadata
+}
+
+type DownloadTaskInfo struct {
+	FileName string
+	FileSize int64
+	FileHash string
+}
+
+type storeBlocks struct {
+	storeID        string
+	lastUploadTime time.Time
+	space          string
+	base           string
+	fileName       string
+	hash           string
+	blocks         [][]byte
+	blockDatas     []fs.Fileblock
+	nums           int
+	now            int
 }
 
 type Server struct {
@@ -30,8 +45,11 @@ type Server struct {
 	_IP        string
 	Group      *fs.Group
 
-	mu       sync.RWMutex
-	storeMap map[string]*storeBlocks
+	storeMutex sync.RWMutex
+	storeMap   map[string]*storeBlocks
+
+	downloadMutex sync.RWMutex
+	downloadMap   map[string]*downloadTask
 }
 
 func NewServer(groupName, serverName, addr string) *Server {
@@ -45,14 +63,17 @@ func NewServer(groupName, serverName, addr string) *Server {
 		log.Fatal("New server failed")
 	}
 	server := &Server{
-		Group:      fs.NewGroup(groupName, ffs, sfs),
-		serverName: serverName,
-		_IP:        addr,
+		Group:       fs.NewGroup(groupName, ffs, sfs),
+		serverName:  serverName,
+		_IP:         addr,
+		storeMap:    make(map[string]*storeBlocks),
+		downloadMap: make(map[string]*downloadTask),
 	}
 	return server
 }
 
 func (s *Server) StartServer() {
+	go s.CleanUploadTask(10 * time.Minute)
 	s.Group.Serve()
 }
 
@@ -69,82 +90,221 @@ func (s *Server) StartServer() {
 */
 
 func (s *Server) BeginStoreFile(space, base, name, hash string, blocksNum int) (storeID string, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	storeID = genStoreID()
+	s.storeMutex.Lock()
+	defer s.storeMutex.Unlock()
+	storeID = genTaskID(hash)
 	s.storeMap[storeID] = &storeBlocks{
-		storeID:    storeID,
-		space:      space,
-		base:       base,
-		fileName:   name,
-		hash:       hash,
-		blocks:     make([][]byte, blocksNum),
-		blockDatas: make([]fs.Fileblock, blocksNum),
-		nums:       blocksNum,
-		now:        0,
+		storeID:        storeID,
+		lastUploadTime: time.Now(),
+		space:          space,
+		base:           base,
+		fileName:       name,
+		hash:           hash,
+		blocks:         make([][]byte, blocksNum),
+		blockDatas:     make([]fs.Fileblock, blocksNum),
+		nums:           blocksNum,
+		now:            0,
 	}
 	return
 }
 
-func (s *Server) StoreBlock(storeID, hash string, data []byte) error {
-	s.mu.Lock()
+func (s *Server) StoreBlock(storeID string, index int, hash string, data []byte) error {
+	s.storeMutex.RLock()
 	info, ok := s.storeMap[storeID]
-	s.mu.RUnlock()
+	s.storeMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("storeID not exist")
 	}
 	if info.now > info.nums {
-		s.mu.Lock()
+		s.storeMutex.Lock()
 		delete(s.storeMap, storeID)
-		s.mu.Unlock()
-		return fmt.Errorf("block nums is enough,something wrong")
+		s.storeMutex.Unlock()
+		return fmt.Errorf("block nums larger than need, upload canceled")
 	}
-	info.blocks[info.now] = data
-	info.blockDatas[info.now] = fs.NewFileBlock(s.Group.StoreSystem.Peer().Pick(hash).PAddr(), int64(len(data)), hash)
+	info.blocks[index] = data
+	info.blockDatas[index] = fs.NewFileBlock(s.Group.StoreSystem.Peer().Pick(hash).PAddr(), int64(len(data)), hash)
+	info.lastUploadTime = time.Now()
 	info.now++
+	if info.now == info.nums {
+		log.Println("end store file")
+		return s.EndStoreFile(storeID)
+	}
 	return nil
 }
 
 func (s *Server) EndStoreFile(storeID string) error {
-	s.mu.RLock()
+	s.storeMutex.RLock()
 	info, ok := s.storeMap[storeID]
-	s.mu.RUnlock()
+	s.storeMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("storeID not exist")
 	}
+	if info.now != info.nums {
+		return fmt.Errorf("block nums is not enough,something wrong")
+	}
+
 	for i, v := range info.blocks {
 		bi := info.blockDatas[i]
-		s.Group.StoreSystem.Store(bi.Hash, fmt.Sprintf("%s_%d", info.fileName, bi.BlockID), v)
+		s.Group.StoreSystem.Store(bi.Hash, fmt.Sprintf("%s_%s_%d.block", bi.Hash, info.fileName, bi.BlockID), v)
 	}
 	metadata := fs.NewMetaData(info.fileName, info.hash, time.Now(), info.blockDatas)
 	data, _ := fs.MarshalMetaData(&metadata)
-	err := s.Group.FrontSystem.PutMetadata(info.space, info.base, info.fileName, info.hash, data)
-	s.mu.Lock()
+	err := s.Group.FrontSystem.PutMetadata(info.space, info.base, info.fileName+".meta", info.hash, data)
+	s.storeMutex.Lock()
 	delete(s.storeMap, storeID)
-	s.mu.Unlock()
+	s.storeMutex.Unlock()
 	return err
 }
 
-func (s *Server) GetFile(space, base, name string) {
+func (s *Server) CheckUploadStatus(storeID string) (int, error) {
+	s.storeMutex.RLock()
+	info, ok := s.storeMap[storeID]
+	s.storeMutex.RUnlock()
+	if !ok {
+		return -1, fmt.Errorf("storeID not exist")
+	}
+	return info.now, nil
+}
+
+func (s *Server) CleanUploadTask(t time.Duration) {
+	if s.storeMap == nil {
+		return
+	}
+	log.Println("[Server] clean upload task start.")
+	for {
+		time.Sleep(t)
+		s.storeMutex.Lock()
+		for k, v := range s.storeMap {
+			if time.Since(v.lastUploadTime) > t {
+				delete(s.storeMap, k)
+			}
+		}
+		s.storeMutex.Unlock()
+	}
 
 }
 
-func (s *Server) DeleteFile(space, base, name string) {
+func (s *Server) BeginDownloadFile(space, base, name string) (downloadID string, fileSize int64, blockNum int, err error) {
+	metadataBytes, err := s.Group.FrontSystem.GetMetadata(space, base, name)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	metadata := &fs.Metadata{}
+	fs.UnmarshalMetaData(metadataBytes, metadata)
+	downloadID = genTaskID(metadata.Hash)
+	blockNum = len(metadata.Blocks)
+	fileSize = metadata.Size
+	s.downloadMutex.Lock()
+	defer s.downloadMutex.Unlock()
+	s.downloadMap[downloadID] = &downloadTask{
+		downloadID: downloadID,
+		fileName:   name,
+		fileSize:   metadata.Size,
+		fileHash:   metadata.Hash,
+		metadata:   metadata,
+	}
+	return
+}
+
+func (s *Server) GetBlock(downloadID string, blockIndex int) ([]byte, error) {
+	s.downloadMutex.RLock()
+	info, ok := s.downloadMap[downloadID]
+	s.downloadMutex.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("downloadID not exist")
+	}
+	if blockIndex >= len(info.metadata.Blocks) {
+		return nil, fmt.Errorf("blockIndex out of range")
+	}
+	block := info.metadata.Blocks[blockIndex]
+	file, err := s.Group.StoreSystem.Get(block.Hash)
+	if err != nil {
+		return nil, err
+	}
+	if file == nil {
+		return nil, fmt.Errorf("block not exist")
+	}
+	return file.Data(), nil
+}
+
+func (s *Server) GetBlockByRange(downloadID string, start, end int64) ([]byte, error) {
+	s.downloadMutex.RLock()
+	info, ok := s.downloadMap[downloadID]
+	s.downloadMutex.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("downloadID not exist")
+	}
+	if start > end || end > info.fileSize {
+		return nil, fmt.Errorf("range out of range")
+	}
+	for i := 0; i < len(info.metadata.Blocks); i++ {
+		block := info.metadata.Blocks[i]
+		log.Printf("block %d: %d-%d", i, block.Offset, block.Offset+block.Size)
+		//Range处于一个Block内
+		if block.Offset <= start && block.Offset+end <= block.Size {
+			log.Println("range in one block")
+			data, err := s.GetBlock(downloadID, i)
+			data = data[start-block.Offset : end-block.Offset]
+			return data, err
+		}
+		//Range的start处于当前Block，end处于下一个Block
+		if block.Offset <= start && block.Offset+end > block.Size {
+			log.Println("range in two block")
+			firstData, err := s.GetBlock(downloadID, i)
+			if err != nil {
+				return nil, err
+			}
+			secondData, err := s.GetBlock(downloadID, i+1)
+			if err != nil {
+				return nil, err
+			}
+			firstData = firstData[start-block.Offset:]
+			secondData = secondData[:end-block.Offset]
+			return append(firstData, secondData...), nil
+		}
+	}
+	return nil, fmt.Errorf("range out of range")
+}
+
+func (s *Server) DownloadTaskInfo(downloadID string) DownloadTaskInfo {
+	s.downloadMutex.RLock()
+	info, ok := s.downloadMap[downloadID]
+	s.downloadMutex.RUnlock()
+	if !ok {
+		return DownloadTaskInfo{}
+	}
+	return DownloadTaskInfo{
+		FileName: info.fileName,
+		FileSize: info.fileSize,
+		FileHash: info.fileHash,
+	}
+}
+
+func (s *Server) EndDownloadFile(downloadID string) error {
+	s.downloadMutex.Lock()
+	defer s.downloadMutex.Unlock()
+	delete(s.downloadMap, downloadID)
+	return nil
+}
+
+func (s *Server) DeleteFile(space, base, name string) error {
 	//获取文件元数据
 	metadataBytes, err := s.Group.FrontSystem.GetMetadata(space, base, name)
 	if err != nil {
 		log.Printf("[Server] DeleteFile failed: %v", err)
-		return
+		return err
 	}
 	metadata := &fs.Metadata{}
 	fs.UnmarshalMetaData(metadataBytes, metadata)
 	//删除文件分片
 	for _, v := range metadata.Blocks {
-		s.Group.StoreSystem.Delete(v.Hash)
+		if err := s.Group.StoreSystem.Delete(v.Hash); err != nil {
+			return err
+		}
 	}
 
 	//删除文件元数据
-	s.Group.FrontSystem.DeleteMetadata(space, base, name, metadata.Hash)
+	return s.Group.FrontSystem.DeleteMetadata(space, base, name, metadata.Hash)
 }
 
 func (s *Server) MakeDir(space, base, name string) error {
