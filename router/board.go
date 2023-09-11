@@ -220,13 +220,18 @@ func (a *ApiServer) PreUploadFile(c *gin.Context) {
 	}))
 }
 
+func (a *ApiServer) CheckUploadChunk(c *gin.Context) {
+
+}
+
 func (a *ApiServer) UploadFile(c *gin.Context) {
 	log.Println("upload file")
-	uploadForm := &service.UploadForm{}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, JSON_RETURN(Upload_FormErr, false, err.Error(), nil))
 	}
+	uploadForm := &service.UploadForm{}
 	uploadForm.Space = c.PostForm("space")
 	uploadForm.BaseDir = c.PostForm("base")
 	uploadForm.StoreID = c.PostForm("identifier")

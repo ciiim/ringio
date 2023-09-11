@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	RPC_TDFS_PORT = "9631"
-	RPC_HDFS_PORT = "9632"
-	_RPC_TIMEOUT  = time.Second * 5
+	RPC_FS_PORT  = "9631"
+	_RPC_TIMEOUT = time.Second * 5
 )
 
 type rpcHashClient struct {
@@ -55,7 +54,7 @@ Peer Method Start
 func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo, action peers.PeerActionType, pis ...peers.PeerInfo) error {
 	for _, pi := range pis {
 		log.Printf("[RPC Client] PeerAction: %s to %s\n", action.String(), pi.PAddr())
-		conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Printf("[RPC Client] Dial %s error: %s", pi.PAddr(), err.Error())
 			continue
@@ -64,7 +63,7 @@ func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo,
 		client := fspb.NewPeerServiceClient(conn)
 		_, err = client.PeerSync(ctx, &fspb.PeerInfo{
 			Name:   target.PName(),
-			Addr:   target.PAddr(),
+			Addr:   target.PAddr().String(),
 			Stat:   int64(target.PStat()),
 			Action: int64(action),
 		})
@@ -79,7 +78,7 @@ func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo,
 
 func (c *rpcPeerClient) getPeerList(ctx context.Context, pi peers.PeerInfo) ([]peers.PeerInfo, error) {
 	log.Printf("[RPC Client] GetPeerList from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +110,7 @@ rpcHashClient Method Start
 
 func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) (HashDFile, error) {
 	log.Printf("[RPC Client] Get from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return HashDFile{}, err
 	}
@@ -129,7 +128,7 @@ func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) 
 			HashFileInfo: hfi,
 			DPeerInfo: DPeerInfo{
 				PeerName: resp.PeerInfo.Name,
-				PeerAddr: resp.PeerInfo.Addr,
+				PeerAddr: DAddr(resp.PeerInfo.Addr),
 				PeerStat: peers.PeerStatType(resp.PeerInfo.Stat),
 			},
 		},
@@ -138,7 +137,7 @@ func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) 
 
 func (c *rpcHashClient) put(ctx context.Context, pi peers.PeerInfo, key string, filename string, value []byte) error {
 	log.Printf("[RPC Client] Put to %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -155,7 +154,7 @@ func (c *rpcHashClient) put(ctx context.Context, pi peers.PeerInfo, key string, 
 
 func (c *rpcHashClient) delete(ctx context.Context, pi peers.PeerInfo, key string) error {
 	log.Printf("[RPC Client] Delete file in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -183,7 +182,7 @@ newRPCTreeClient Method Start
 
 func (r *rpcTreeClient) getMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string) ([]byte, error) {
 	log.Printf("[RPC Client] GetMetadata from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +202,7 @@ func (r *rpcTreeClient) getMetadata(ctx context.Context, pi peers.PeerInfo, spac
 
 func (r *rpcTreeClient) putMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string, data []byte) error {
 	log.Printf("[RPC Client] PutMetadata to %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -228,7 +227,7 @@ func (r *rpcTreeClient) putMetadata(ctx context.Context, pi peers.PeerInfo, spac
 
 func (r *rpcTreeClient) deleteMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name, hash string) error {
 	log.Printf("[RPC Client] DeleteMetadata in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -249,7 +248,7 @@ func (r *rpcTreeClient) deleteMetadata(ctx context.Context, pi peers.PeerInfo, s
 
 func (r *rpcTreeClient) makeDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) error {
 	log.Printf("[RPC Client] MakeDir in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -269,7 +268,7 @@ func (r *rpcTreeClient) makeDir(ctx context.Context, pi peers.PeerInfo, space st
 
 func (r *rpcTreeClient) renameDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string, newName string) error {
 	log.Printf("[RPC Client] RenameDir in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -292,7 +291,7 @@ func (r *rpcTreeClient) renameDir(ctx context.Context, pi peers.PeerInfo, space 
 
 func (r *rpcTreeClient) deleteDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) error {
 	log.Printf("[RPC Client] DeleteDir in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -312,7 +311,7 @@ func (r *rpcTreeClient) deleteDir(ctx context.Context, pi peers.PeerInfo, space 
 
 func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) ([]SubInfo, error) {
 	log.Printf("[RPC Client] GetDirSub from %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +331,7 @@ func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space 
 
 func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space string, cap Byte) error {
 	log.Printf("[RPC Client] NewSpace in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -351,7 +350,7 @@ func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space s
 
 func (r *rpcTreeClient) deleteSpace(ctx context.Context, pi peers.PeerInfo, space string) error {
 	log.Printf("[RPC Client] DeleteSpace in %s", pi.PAddr())
-	conn, err := grpc.Dial(pi.PAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}

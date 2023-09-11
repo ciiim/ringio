@@ -24,7 +24,14 @@ func GetIP() string {
 	return ""
 }
 
-func genTaskID(fileHash string) string {
+type TaskType int
+
+const (
+	TaskTypeUpload TaskType = iota
+	TaskTypeDownload
+)
+
+func genTaskID(fileHash string, taskType TaskType) string {
 	timeStr := strconv.Itoa(int(time.Now().UnixMilli())) + fileHash
 	sum := sha1.Sum([]byte(timeStr))
 	return hex.EncodeToString(sum[:])

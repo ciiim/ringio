@@ -43,9 +43,14 @@ const (
 	P_ACTION_QUIT
 )
 
+type Addr interface {
+	String() string
+	IP() string
+	Port() string
+}
 type Peer interface {
 	PName() string
-	PAddr() string
+	PAddr() Addr
 	Pick(key string) PeerInfo
 	Info() PeerInfo
 	PeerOperator
@@ -54,8 +59,7 @@ type Peer interface {
 type PeerInfo interface {
 	Equal(pi PeerInfo) bool
 	PName() string
-	PAddr() string
-	Port() string
+	PAddr() Addr
 	PStat() PeerStatType
 }
 

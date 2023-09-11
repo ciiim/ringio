@@ -19,6 +19,10 @@ Group 是一个文件系统的集合，包含一个前端文件系统和一个�
 type Group struct {
 	groupName string
 
+	rpcServer *rpcFSServer
+
+	PeerService peers.Peer
+
 	/*
 		It will store the meta data of the file
 	*/
@@ -33,16 +37,22 @@ type Group struct {
 	StoreSystem HashDFileSystemI
 }
 
-func NewGroup(groupName string, frontSystem TreeDFileSystemI, storeSystem HashDFileSystemI) *Group {
+func NewGroup(groupName string, peerService peers.Peer, frontSystem TreeDFileSystemI, storeSystem HashDFileSystemI) *Group {
 	return &Group{
 		groupName:   groupName,
 		StoreSystem: storeSystem,
 		FrontSystem: frontSystem,
+		PeerService: peerService,
+		rpcServer:   newRPCFSServer(peerService, storeSystem, frontSystem),
 	}
 }
 func (g *Group) Serve() {
-	go g.StoreSystem.Serve()
-	g.FrontSystem.Serve()
+	if g.PeerService == nil {
+		log.Println("[Group] No peer service found")
+		return
+	}
+	log.Printf("[Group] Peer service serve <%s> on port <%s>", g.groupName, g.PeerService.PAddr().Port())
+	g.rpcServer.serve(g.PeerService.PAddr().Port())
 }
 
 /*
@@ -67,8 +77,8 @@ func (g *Group) AddPeer(name, addr string) {
 	if name == "" || addr == "" {
 		return
 	}
-	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_TDFS_PORT)))
-	g.StoreSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_HDFS_PORT)))
+	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_FS_PORT)))
+	g.StoreSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_FS_PORT)))
 }
 
 func (g *Group) PeerList() []DPeerInfo {

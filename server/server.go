@@ -27,6 +27,11 @@ type DownloadTaskInfo struct {
 	FileHash string
 }
 
+/*
+TODO: 使用本机在群组中的id和文件hash和其他信息进行拼接生成唯一的任务id
+
+	storeTaskID@serverID@filehash@timestamp -> base64 encode -> storeID
+*/
 type storeBlocks struct {
 	storeID        string
 	lastUploadTime time.Time
@@ -43,6 +48,7 @@ type storeBlocks struct {
 type Server struct {
 	serverName string
 	_IP        string
+	_Port      string
 	Group      *fs.Group
 
 	storeMutex sync.RWMutex
@@ -52,20 +58,25 @@ type Server struct {
 	downloadMap   map[string]*downloadTask
 }
 
-func NewServer(groupName, serverName, addr string) *Server {
-	if addr == "" {
-		addr = GetIP()
+func NewServer(groupName, serverName, ip, port string) *Server {
+	if ip == "" {
+		ip = GetIP()
 	}
-	log.Printf("[Server] New server <%s>-<%s>", serverName, addr)
-	ffs := fs.NewTreeDFileSystem(*fs.NewDPeer("front0_"+serverName+"_"+groupName, addr, 20, nil), "./_fs_/front0_"+serverName+"_"+groupName)
-	sfs := fs.NewDFS(*fs.NewDPeer("store0_"+serverName+"_"+groupName, addr, 20, nil), "./_fs_/store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
+	if port == "" {
+		port = fs.RPC_FS_PORT
+	}
+	log.Printf("[Server] New server <%s>-<%s>", serverName, ip)
+	peerService := fs.NewDPeer("_fs_"+serverName, fs.WithPort(ip, port), 20, nil)
+	ffs := fs.NewTreeDFileSystem("./_fs_/front0_" + serverName + "_" + groupName)
+	sfs := fs.NewDFS("./_fs_/store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
 	if ffs == nil || sfs == nil {
 		log.Fatal("New server failed")
 	}
 	server := &Server{
-		Group:       fs.NewGroup(groupName, ffs, sfs),
+		Group:       fs.NewGroup(groupName, peerService, ffs, sfs),
 		serverName:  serverName,
-		_IP:         addr,
+		_IP:         ip,
+		_Port:       port,
 		storeMap:    make(map[string]*storeBlocks),
 		downloadMap: make(map[string]*downloadTask),
 	}
@@ -92,7 +103,7 @@ func (s *Server) StartServer() {
 func (s *Server) BeginStoreFile(space, base, name, hash string, blocksNum int) (storeID string, err error) {
 	s.storeMutex.Lock()
 	defer s.storeMutex.Unlock()
-	storeID = genTaskID(hash)
+	storeID = genTaskID(hash, TaskTypeUpload)
 	s.storeMap[storeID] = &storeBlocks{
 		storeID:        storeID,
 		lastUploadTime: time.Now(),
@@ -122,7 +133,7 @@ func (s *Server) StoreBlock(storeID string, index int, hash string, data []byte)
 		return fmt.Errorf("block nums larger than need, upload canceled")
 	}
 	info.blocks[index] = data
-	info.blockDatas[index] = fs.NewFileBlock(s.Group.StoreSystem.Peer().Pick(hash).PAddr(), int64(len(data)), hash)
+	info.blockDatas[index] = fs.NewFileBlock(s.Group.PeerService.PAddr().String(), int64(len(data)), hash)
 	info.lastUploadTime = time.Now()
 	info.now++
 	if info.now == info.nums {
@@ -191,7 +202,7 @@ func (s *Server) BeginDownloadFile(space, base, name string) (downloadID string,
 	}
 	metadata := &fs.Metadata{}
 	fs.UnmarshalMetaData(metadataBytes, metadata)
-	downloadID = genTaskID(metadata.Hash)
+	downloadID = genTaskID(metadata.Hash, TaskTypeDownload)
 	blockNum = len(metadata.Blocks)
 	fileSize = metadata.Size
 	s.downloadMutex.Lock()
@@ -262,6 +273,7 @@ func (s *Server) GetBlockByRange(downloadID string, start, end int64) ([]byte, e
 			secondData = secondData[:end-block.Offset]
 			return append(firstData, secondData...), nil
 		}
+		//FIX: Range横跨多个Block的情况
 	}
 	return nil, fmt.Errorf("range out of range")
 }

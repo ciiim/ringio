@@ -27,7 +27,6 @@ type HashFileSystemI interface {
 
 type HashDFileSystemI interface {
 	HashFileSystemI
-	Serve()
 	Peer() peers.Peer
 }
 
@@ -50,6 +49,5 @@ type TreeDFileSystemI interface {
 	PutMetadata(space, base, name, hash string, data []byte) error
 	DeleteMetadata(space, base, name, hash string) error
 
-	Serve()
 	Peer() peers.Peer
 }

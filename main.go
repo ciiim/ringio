@@ -41,8 +41,9 @@ func main() {
 
 	nodelist := conf.GetNodes(v)
 	serverName := v.GetString("server.file_server_name")
+	serverPort := v.GetString("server.file_server_port")
 
-	s := server.NewServer("group", serverName, server.GetIP())
+	s := server.NewServer("group", serverName, server.GetIP(), serverPort)
 
 	for _, node := range nodelist {
 		s.AddPeer(node["name"], node["addr"])

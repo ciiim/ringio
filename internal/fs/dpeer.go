@@ -8,6 +8,28 @@ import (
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
+type DAddr string
+
+func (a DAddr) String() string {
+	return string(a)
+}
+
+func (a DAddr) Port() string {
+	t := strings.Split(string(a), ":")
+	if len(t) != 2 {
+		return ""
+	}
+	return t[len(t)-1]
+}
+
+func (a DAddr) IP() string {
+	t := strings.Split(string(a), ":")
+	if len(t) != 2 {
+		return ""
+	}
+	return t[0]
+}
+
 type DPeer struct {
 	info    DPeerInfo
 	hashMap *peers.CMap
@@ -16,15 +38,16 @@ type DPeer struct {
 var _ peers.Peer = (*DPeer)(nil)
 
 type DPeerInfo struct {
+	PeerID   int64              `json:"peer_id"`
 	PeerName string             `json:"peer_name"`
-	PeerAddr string             `json:"peer_addr"` //include port e.g. 10.10.1.5:9631
+	PeerAddr peers.Addr         `json:"peer_addr"` //include port e.g. 10.10.1.5:9631
 	PeerStat peers.PeerStatType `json:"peer_stat"`
 }
 
 func NewDPeerInfo(name, addr string) DPeerInfo {
 	return DPeerInfo{
 		PeerName: name,
-		PeerAddr: addr,
+		PeerAddr: DAddr(addr),
 		PeerStat: peers.P_STAT_ONLINE,
 	}
 }
@@ -35,7 +58,7 @@ func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
 	dlog.debug("NewDPeer", "name: %s, addr: %s", name, addr)
 	info := DPeerInfo{
 		PeerName: name,
-		PeerAddr: addr,
+		PeerAddr: DAddr(addr),
 		PeerStat: peers.P_STAT_ONLINE,
 	}
 	p := &DPeer{
@@ -50,7 +73,7 @@ func (p DPeer) PName() string {
 	return p.info.PeerName
 }
 
-func (p DPeer) PAddr() string {
+func (p DPeer) PAddr() peers.Addr {
 	return p.info.PeerAddr
 }
 
@@ -118,7 +141,7 @@ func (p DPeer) GetPeerListFromPeer(pi peers.PeerInfo) ([]peers.PeerInfo, error) 
 	}
 	peerList := make([]peers.PeerInfo, 0, len(list))
 	for _, v := range list {
-		peerList = append(peerList, NewDPeerInfo(v.PName(), v.PAddr()))
+		peerList = append(peerList, NewDPeerInfo(v.PName(), v.PAddr().String()))
 	}
 	return peerList, nil
 }
@@ -144,20 +167,12 @@ func (pi DPeerInfo) PName() string {
 	return pi.PeerName
 }
 
-func (pi DPeerInfo) PAddr() string {
+func (pi DPeerInfo) PAddr() peers.Addr {
 	return pi.PeerAddr
 }
 
 func (pi DPeerInfo) PStat() peers.PeerStatType {
 	return pi.PeerStat
-}
-
-func (pi DPeerInfo) Port() string {
-	t := strings.Split(pi.PeerAddr, ":")
-	if len(t) != 2 {
-		return ""
-	}
-	return t[len(t)-1]
 }
 
 func PeerInfoListToDpeerInfoList(list []peers.PeerInfo) []DPeerInfo {

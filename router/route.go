@@ -76,7 +76,8 @@ func InitApiServer(service *service.Service) *ApiServer {
 			boardAPIGroup.DELETE("", as.DeleteBoard)
 
 			boardAPIGroup.POST("/pre-upload", as.PreUploadFile)
-			// boardAPIGroup.GET("/upload-status", as.CheckUploadStatus)
+
+			boardAPIGroup.GET("/upload", as.CheckUploadChunk)
 			boardAPIGroup.POST("/upload", as.UploadFile)
 
 			boardAPIGroup.GET("/pre-download", as.PreDownloadFile)
@@ -84,7 +85,11 @@ func InitApiServer(service *service.Service) *ApiServer {
 			boardAPIGroup.GET("/download/:downloadID", as.DownloadChunkRange)
 			boardAPIGroup.POST("/download-done", as.DownloadFileDone)
 
+			//Delete file
 			boardAPIGroup.DELETE("/f", as.DeleteFile)
+
+			//Get file info
+			boardAPIGroup.GET("/f")
 
 		}
 

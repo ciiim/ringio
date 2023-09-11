@@ -38,13 +38,16 @@ func (d *HashDFileSystem) PickPeer(key string) peers.PeerInfo {
 	return d.self.Pick(key)
 }
 
-func NewDFS(self peers.Peer, rootPath string, capacity int64, calcStorePathFn CalcStoreFilePathFnType) *HashDFileSystem {
+func NewDFS(rootPath string, capacity int64, calcStorePathFn CalcStoreFilePathFnType) *HashDFileSystem {
 	d := &HashDFileSystem{
 		hashFileSystem: newHashFileSystem(rootPath, capacity, calcStorePathFn),
 		remote:         newRPCHashClient(),
-		self:           self.(DPeer),
 	}
 	return d
+}
+
+func (d *HashDFileSystem) SetPeerService(ps peers.Peer) {
+	d.self = ps
 }
 
 func (d *HashDFileSystem) Get(key string) (HashFileI, error) {
@@ -183,9 +186,4 @@ func (df HashDFile) Stat() HashFileInfoI {
 
 func (dfi HashDFileInfo) PeerInfo() peers.PeerInfo {
 	return dfi.DPeerInfo
-}
-
-func (d *HashDFileSystem) Serve() {
-	log.Println("[HashDFileSystem] Serve on", d.self.PAddr()+":"+RPC_HDFS_PORT)
-	newRPCHDFSServer(d).serve(RPC_HDFS_PORT)
 }

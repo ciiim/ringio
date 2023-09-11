@@ -18,54 +18,32 @@ func (s *Server) AddPeer(name, addr string) {
 func (s *Server) JoinCluster(name, addr string) error {
 	//boradcast to group and get all peers of the group
 
-	frontDest := fs.NewDPeerInfo(name, fs.WithPort(addr, fs.RPC_TDFS_PORT))
-	storeDest := fs.NewDPeerInfo(name, fs.WithPort(addr, fs.RPC_HDFS_PORT))
+	dest := fs.NewDPeerInfo(name, addr)
 
 	//Join Cluster
-	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_JOIN, frontDest)
+	err := s.Group.PeerService.PActionTo(peers.P_ACTION_JOIN, dest)
 	if err != nil {
 		return err
 	}
 
 	// Get List from cluster
-	peerList, err := s.Group.FrontSystem.Peer().GetPeerListFromPeer(frontDest)
+	peerList, err := s.Group.PeerService.GetPeerListFromPeer(dest)
 	if err != nil {
 		return err
 	}
 
 	//Add to peer map
 	for _, peer := range peerList {
-		_ = s.Group.FrontSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
-	}
-
-	//Join Cluster
-	err = s.Group.StoreSystem.Peer().PActionTo(peers.P_ACTION_JOIN, storeDest)
-	if err != nil {
-		return err
-	}
-
-	// Get List from cluster
-	peerList, err = s.Group.StoreSystem.Peer().GetPeerListFromPeer(storeDest)
-	if err != nil {
-		return err
-	}
-
-	//Add to peer map
-	for _, peer := range peerList {
-		_ = s.Group.StoreSystem.Peer().PSync(peer, peers.P_ACTION_NEW)
+		_ = s.Group.PeerService.PSync(peer, peers.P_ACTION_NEW)
 	}
 
 	return nil
 }
 
 func (s *Server) QuitCluster() error {
-	list := s.Group.FrontSystem.Peer().PList()
+	list := s.Group.PeerService.PList()
 
-	err := s.Group.FrontSystem.Peer().PActionTo(peers.P_ACTION_QUIT, list...)
-	if err != nil {
-		return err
-	}
-	return s.Group.StoreSystem.Peer().PActionTo(peers.P_ACTION_QUIT, list...)
+	return s.Group.PeerService.PActionTo(peers.P_ACTION_QUIT, list...)
 
 }
 
