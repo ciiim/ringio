@@ -98,7 +98,7 @@ func (DefaultPeer) PName() string {
 }
 
 func (DefaultPeer) PAddr() Addr {
-	return nil
+	return EmptyAddr{}
 }
 
 func (DefaultPeer) Pick(key string) PeerInfo {
@@ -135,4 +135,20 @@ func (DefaultPeer) GetPeerListFromPeer(pi PeerInfo) ([]PeerInfo, error) {
 
 func (DefaultPeer) PList() []PeerInfo {
 	return nil
+}
+
+type EmptyAddr struct{}
+
+var _ Addr = (*EmptyAddr)(nil)
+
+func (EmptyAddr) String() string {
+	return ""
+}
+
+func (EmptyAddr) IP() string {
+	return ""
+}
+
+func (EmptyAddr) Port() string {
+	return ""
 }
