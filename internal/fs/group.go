@@ -38,14 +38,23 @@ type Group struct {
 }
 
 func NewGroup(groupName string, peerService peers.Peer, frontSystem TreeDFileSystemI, storeSystem HashDFileSystemI) *Group {
-	return &Group{
+	if frontSystem == nil {
+		log.Println("[Group Warn] Empty front system")
+	}
+	if storeSystem == nil {
+		log.Println("[Group Warn] Empty store system")
+	}
+
+	group := &Group{
 		groupName:   groupName,
 		StoreSystem: storeSystem,
 		FrontSystem: frontSystem,
 		PeerService: peerService,
 		rpcServer:   newRPCFSServer(peerService, storeSystem, frontSystem),
 	}
+	return group
 }
+
 func (g *Group) Serve() {
 	if g.PeerService == nil {
 		log.Println("[Group] No peer service found")
@@ -58,12 +67,19 @@ func (g *Group) Serve() {
 /*
 it will close the front system and all the file systems in the list.
 
+if this server join a cluster, it will send a OFFLINE message to the cluster.
+
 Return the last error,
 
 other error will be logged.
 */
 func (g *Group) Close() error {
-	err := g.FrontSystem.Close()
+	err := g.PeerService.PActionTo(peers.P_ACTION_OFFLINE, g.PeerService.PList()...)
+	if err != nil {
+		log.Println("[Group] Send offline message error:", err)
+	}
+
+	err = g.FrontSystem.Close()
 	if err != nil {
 		log.Println("[Group] Close front system error:", err)
 	}
@@ -77,8 +93,8 @@ func (g *Group) AddPeer(name, addr string) {
 	if name == "" || addr == "" {
 		return
 	}
-	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_FS_PORT)))
-	g.StoreSystem.Peer().PAdd(NewDPeerInfo(name, WithPort(addr, RPC_FS_PORT)))
+	g.FrontSystem.Peer().PAdd(NewDPeerInfo(name, addr))
+	g.StoreSystem.Peer().PAdd(NewDPeerInfo(name, addr))
 }
 
 func (g *Group) PeerList() []DPeerInfo {

@@ -96,7 +96,7 @@ source peer - pi_in
 func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
 	dlog.debug("PSync", "pi_in: %v, action: %s", pi_in, action.String())
 	if pi_in.Equal(p.info) {
-		log.Println("[Peer] Cannot Operate myself")
+		log.Println("[DPeer] Cannot Operate myself")
 		return nil
 	}
 	var err error
@@ -108,13 +108,19 @@ func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
 		defer cancel()
 		list := p.PList()
 		err = client.peerActionTo(ctx, pi_in, peers.P_ACTION_NEW, list...)
+
 	case peers.P_ACTION_QUIT:
 		// remove peer from hashMap
 		p.PDel(pi_in)
+
 	case peers.P_ACTION_NEW:
 		// add peer to hashMap
 		p.PAdd(pi_in)
+
+	default:
+		log.Println("[DPeer] Unknown action")
 	}
+
 	return err
 }
 

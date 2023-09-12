@@ -46,6 +46,8 @@ type storeBlocks struct {
 }
 
 type Server struct {
+	stopChan chan struct{}
+
 	serverName string
 	_IP        string
 	_Port      string
@@ -58,7 +60,7 @@ type Server struct {
 	downloadMap   map[string]*downloadTask
 }
 
-func NewServer(groupName, serverName, ip, port string) *Server {
+func NewServer(serverName, ip, port string, stopChan chan struct{}, options ...ServerOptions) *Server {
 	if ip == "" {
 		ip = GetIP()
 	}
@@ -66,26 +68,28 @@ func NewServer(groupName, serverName, ip, port string) *Server {
 		port = fs.RPC_FS_PORT
 	}
 	log.Printf("[Server] New server <%s>-<%s>", serverName, ip)
-	peerService := fs.NewDPeer("_fs_"+serverName, fs.WithPort(ip, port), 20, nil)
-	ffs := fs.NewTreeDFileSystem("./_fs_/front0_" + serverName + "_" + groupName)
-	sfs := fs.NewDFS("./_fs_/store0_"+serverName+"_"+groupName, 50*fs.GB, nil)
-	if ffs == nil || sfs == nil {
-		log.Fatal("New server failed")
-	}
 	server := &Server{
-		Group:       fs.NewGroup(groupName, peerService, ffs, sfs),
+		stopChan:    stopChan,
 		serverName:  serverName,
 		_IP:         ip,
 		_Port:       port,
 		storeMap:    make(map[string]*storeBlocks),
 		downloadMap: make(map[string]*downloadTask),
 	}
+	server.handleOptions(options...)
 	return server
 }
 
 func (s *Server) StartServer() {
 	go s.CleanUploadTask(10 * time.Minute)
-	s.Group.Serve()
+	if s.stopChan == nil {
+		s.Group.Serve()
+	} else {
+		go s.Group.Serve()
+		<-s.stopChan
+		log.Println("[Server] Closing...")
+		s.Group.Close()
+	}
 }
 
 /*

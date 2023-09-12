@@ -43,7 +43,9 @@ func main() {
 	serverName := v.GetString("server.file_server_name")
 	serverPort := v.GetString("server.file_server_port")
 
-	s := server.NewServer("group", serverName, server.GetIP(), serverPort)
+	stopChan := make(chan struct{})
+
+	s := server.NewServer(serverName, server.GetIP(), serverPort, stopChan, server.OPTION_NO_FRONT, server.OPTION_NO_STORE)
 
 	for _, node := range nodelist {
 		s.AddPeer(node["name"], node["addr"])
@@ -89,5 +91,6 @@ func main() {
 		go r.Run(port)
 	}
 	log.Println("[Init] server is starting...")
+	go server.WaitSIGINT(stopChan)
 	s.StartServer()
 }
