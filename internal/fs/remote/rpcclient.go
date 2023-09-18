@@ -1,4 +1,4 @@
-package fs
+package remote
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 
 	"github.com/ciiim/cloudborad/internal/fs/fspb"
@@ -121,7 +122,7 @@ func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) 
 	if err != nil {
 		return HashDFile{}, err
 	}
-	hfi := pBFileInfoToHashFileInfo(resp.FileInfo)
+	hfi := PBFileInfoToHashFileInfo(resp.FileInfo)
 	return HashDFile{
 		data: resp.Data,
 		info: HashDFileInfo{
@@ -309,7 +310,7 @@ func (r *rpcTreeClient) deleteDir(ctx context.Context, pi peers.PeerInfo, space 
 	return nil
 }
 
-func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) ([]SubInfo, error) {
+func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) ([]fs.SubInfo, error) {
 	log.Printf("[RPC Client] GetDirSub from %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -326,10 +327,10 @@ func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space 
 	if err != nil {
 		return nil, err
 	}
-	return pbSubsToSubs(resp.SubInfo), nil
+	return PbSubsToSubs(resp.SubInfo), nil
 }
 
-func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space string, cap Byte) error {
+func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space string, cap fs.Byte) error {
 	log.Printf("[RPC Client] NewSpace in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

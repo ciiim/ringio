@@ -16,11 +16,11 @@ const (
 
 type DirEntry = fs.DirEntry
 
-type treeFileSystem struct {
+type TreeFileSystem struct {
 	rootPath string
 }
 
-var _ TreeFileSystemI = (*treeFileSystem)(nil)
+var _ TreeFileSystemI = (*TreeFileSystem)(nil)
 
 const (
 	DIR_PERFIX = "__DIR__"
@@ -28,18 +28,18 @@ const (
 	BASE_DIR   = "__BASE__"
 )
 
-func newTreeFileSystem(rootPath string) *treeFileSystem {
+func NewTreeFileSystem(rootPath string) *TreeFileSystem {
 	err := os.MkdirAll(rootPath, os.ModePerm)
 	if err != nil {
 		panic("mkdir error:" + err.Error())
 	}
-	t := &treeFileSystem{
+	t := &TreeFileSystem{
 		rootPath: rootPath,
 	}
 	return t
 }
 
-func (t *treeFileSystem) NewSpace(space string, cap Byte) error {
+func (t *TreeFileSystem) NewSpace(space string, cap Byte) error {
 
 	if _, err := os.Stat(filepath.Join(t.rootPath, space, BASE_DIR)); err == nil {
 		return ErrSpaceExist
@@ -64,7 +64,7 @@ func (t *treeFileSystem) NewSpace(space string, cap Byte) error {
 	return err
 }
 
-func (t *treeFileSystem) GetSpace(space string) *Space {
+func (t *TreeFileSystem) GetSpace(space string) *Space {
 	file, err := os.Open(filepath.Join(t.rootPath, space, STAT_FILE))
 	if err != nil {
 		log.Println("[Space] Lack of stat file", err)
@@ -91,14 +91,14 @@ func (t *treeFileSystem) GetSpace(space string) *Space {
 	return s
 }
 
-func (t *treeFileSystem) DeleteSpace(space string) error {
+func (t *TreeFileSystem) DeleteSpace(space string) error {
 	if _, err := os.Stat(filepath.Join(t.rootPath, space, BASE_DIR)); err != nil {
 		return ErrSpaceNotFound
 	}
 	return os.RemoveAll(filepath.Join(t.rootPath, space))
 }
 
-func (t *treeFileSystem) MakeDir(space, base, name string) error {
+func (t *TreeFileSystem) MakeDir(space, base, name string) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
@@ -107,7 +107,7 @@ func (t *treeFileSystem) MakeDir(space, base, name string) error {
 
 }
 
-func (t *treeFileSystem) RenameDir(space, base, name, newName string) error {
+func (t *TreeFileSystem) RenameDir(space, base, name, newName string) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
@@ -116,7 +116,7 @@ func (t *treeFileSystem) RenameDir(space, base, name, newName string) error {
 
 }
 
-func (t *treeFileSystem) DeleteDir(space, base, name string) error {
+func (t *TreeFileSystem) DeleteDir(space, base, name string) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
@@ -125,7 +125,7 @@ func (t *treeFileSystem) DeleteDir(space, base, name string) error {
 
 }
 
-func (t *treeFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error) {
+func (t *TreeFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error) {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return nil, ErrSpaceNotFound
@@ -138,7 +138,7 @@ func (t *treeFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error) 
 
 }
 
-func (t *treeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
+func (t *TreeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return nil, ErrSpaceNotFound
@@ -147,7 +147,7 @@ func (t *treeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
 
 }
 
-func (t *treeFileSystem) PutMetadata(space, base, name, fileHash string, data []byte) error {
+func (t *TreeFileSystem) PutMetadata(space, base, name, fileHash string, data []byte) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
@@ -156,7 +156,7 @@ func (t *treeFileSystem) PutMetadata(space, base, name, fileHash string, data []
 	return sp.storeMetaData(base, name, data)
 
 }
-func (t *treeFileSystem) DeleteMetadata(space, base, name, hash string) error {
+func (t *TreeFileSystem) DeleteMetadata(space, base, name, hash string) error {
 	sp := t.GetSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound
@@ -164,6 +164,6 @@ func (t *treeFileSystem) DeleteMetadata(space, base, name, hash string) error {
 	return sp.deleteMetaData(base, name)
 }
 
-func (t *treeFileSystem) Close() error {
+func (t *TreeFileSystem) Close() error {
 	return nil
 }

@@ -3,8 +3,9 @@ package server
 import (
 	"log"
 
-	"github.com/ciiim/cloudborad/internal/fs"
+	dlogger "github.com/ciiim/cloudborad/internal/debug"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
+	"github.com/ciiim/cloudborad/internal/fs/remote"
 )
 
 func (s *Server) ServerInfo() (string, string) {
@@ -18,7 +19,7 @@ func (s *Server) AddPeer(name, addr string) {
 func (s *Server) JoinCluster(name, addr string) error {
 	//boradcast to group and get all peers of the group
 
-	dest := fs.NewDPeerInfo(name, addr)
+	dest := remote.NewDPeerInfo(name, addr)
 
 	//Join Cluster
 	err := s.Group.PeerService.PActionTo(peers.P_ACTION_JOIN, dest)
@@ -48,6 +49,6 @@ func (s *Server) QuitCluster() error {
 }
 
 func (s *Server) DebugOn() {
-	fs.DebugOn()
+	dlogger.DebugOn()
 	log.Println("[WARNING] DEBUG MODE ON")
 }

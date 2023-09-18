@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ciiim/cloudborad/internal/fs"
+	"github.com/ciiim/cloudborad/internal/fs/remote"
 )
 
 //TODO: 事务(transaction)系统，提供事务接口，支持事务回滚，实现文件下载、上传、删除的事务
@@ -51,7 +52,7 @@ type Server struct {
 	serverName string
 	_IP        string
 	_Port      string
-	Group      *fs.Group
+	Group      *remote.Group
 
 	storeMutex sync.RWMutex
 	storeMap   map[string]*storeBlocks
@@ -65,7 +66,7 @@ func NewServer(serverName, ip, port string, stopChan chan struct{}, options ...S
 		ip = GetIP()
 	}
 	if port == "" {
-		port = fs.RPC_FS_PORT
+		port = remote.RPC_FS_PORT
 	}
 	log.Printf("[Server] New server <%s>-<%s>", serverName, ip)
 	server := &Server{

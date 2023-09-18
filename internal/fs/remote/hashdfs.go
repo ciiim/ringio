@@ -1,4 +1,4 @@
-package fs
+package remote
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 
+	dlogger "github.com/ciiim/cloudborad/internal/debug"
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
@@ -15,19 +17,19 @@ type HashDFile struct {
 }
 
 type HashDFileInfo struct {
-	HashFileInfo
+	fs.HashFileInfo
 	DPeerInfo
 }
 
 // distribute file system
 type HashDFileSystem struct {
-	*hashFileSystem
+	*fs.HashFileSystem
 	remote *rpcHashClient
 	self   peers.Peer
 }
 
 var _ HashDFileSystemI = (*HashDFileSystem)(nil)
-var _ HashFileInfoI = (*HashDFileInfo)(nil)
+var _ fs.HashFileInfoI = (*HashDFileInfo)(nil)
 
 func (d *HashDFileSystem) AddPeer(pis ...peers.PeerInfo) error {
 	d.self.PAdd(pis...)
@@ -38,9 +40,9 @@ func (d *HashDFileSystem) PickPeer(key string) peers.PeerInfo {
 	return d.self.Pick(key)
 }
 
-func NewDFS(rootPath string, capacity int64, calcStorePathFn CalcStoreFilePathFnType) *HashDFileSystem {
+func NewDFS(rootPath string, capacity int64, calcStorePathFn fs.CalcStoreFilePathFnType) *HashDFileSystem {
 	d := &HashDFileSystem{
-		hashFileSystem: newHashFileSystem(rootPath, capacity, calcStorePathFn),
+		HashFileSystem: fs.NewHashFileSystem(rootPath, capacity, calcStorePathFn),
 		remote:         newRPCHashClient(),
 	}
 	return d
@@ -50,8 +52,8 @@ func (d *HashDFileSystem) SetPeerService(ps peers.Peer) {
 	d.self = ps
 }
 
-func (d *HashDFileSystem) Get(key string) (HashFileI, error) {
-	dlog.debug("[HashDFileSystem]", "Get by key '%s'", key)
+func (d *HashDFileSystem) Get(key string) (fs.HashFileI, error) {
+	dlogger.Dlog.LogDebugf("[HashDFileSystem]", "Get by key '%s'", key)
 	pi := d.PickPeer(key)
 	if pi == nil {
 		return nil, peers.ErrPeerNotFound
@@ -60,7 +62,7 @@ func (d *HashDFileSystem) Get(key string) (HashFileI, error) {
 	if pi.Equal(d.self.Info()) {
 		log.Println("[HashDFileSystem]Get from local.")
 		df, err := d.getLocally(key)
-		if errors.Is(err, ErrFileNotFound) {
+		if errors.Is(err, fs.ErrFileNotFound) {
 			return d.recoverFile(key)
 		} else {
 			return df, err
@@ -85,7 +87,7 @@ func (d *HashDFileSystem) Get(key string) (HashFileI, error) {
 }
 
 func (d *HashDFileSystem) Store(key string, filename string, value []byte) error {
-	dlog.debug("[HashDFileSystem]", "Store by key '%s', name '%s'", key, filename)
+	dlogger.Dlog.LogDebugf("[HashDFileSystem]", "Store by key '%s', name '%s'", key, filename)
 	pi := d.PickPeer(key)
 	if pi == nil {
 		return peers.ErrPeerNotFound
@@ -102,7 +104,7 @@ func (d *HashDFileSystem) Store(key string, filename string, value []byte) error
 	}
 
 	// store remotely
-	log.Println("[HashDFileSystem]Put to remote")
+	log.Printf("[HashDFileSystem]Request redirect to %s.", pi.PAddr())
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	return d.remote.put(ctx, pi, key, filename, value)
@@ -130,21 +132,21 @@ func (d *HashDFileSystem) Delete(key string) error {
 }
 
 func (d *HashDFileSystem) getLocally(key string) (HashDFile, error) {
-	file, err := d.hashFileSystem.Get(key)
+	file, err := d.HashFileSystem.Get(key)
 	fi := file.Stat()
 	return HashDFile{
 			data: file.Data(),
-			info: HashDFileInfo{HashFileInfo: fi.(HashFileInfo), DPeerInfo: d.self.Info().(DPeerInfo)},
+			info: HashDFileInfo{HashFileInfo: fi.(fs.HashFileInfo), DPeerInfo: d.self.Info().(DPeerInfo)},
 		},
 		err
 }
 
 func (d *HashDFileSystem) storeLocally(key string, filename string, value []byte) error {
-	return d.hashFileSystem.Store(key, filename, value)
+	return d.HashFileSystem.Store(key, filename, value)
 }
 
 func (d *HashDFileSystem) deleteLocally(key string) error {
-	return d.hashFileSystem.Delete(key)
+	return d.HashFileSystem.Delete(key)
 }
 
 func (d *HashDFileSystem) Peer() peers.Peer {
@@ -160,7 +162,7 @@ func (d *HashDFileSystem) recoverFile(key string) (HashDFile, error) {
 		return HashDFile{}, peers.ErrPeerNotFound
 	}
 	if nextInfo.Equal(d.self.Info()) {
-		return HashDFile{}, ErrFileNotFound
+		return HashDFile{}, fs.ErrFileNotFound
 	}
 	// Get file info from next peer
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
@@ -180,7 +182,7 @@ func (df HashDFile) Data() []byte {
 	return df.data
 }
 
-func (df HashDFile) Stat() HashFileInfoI {
+func (df HashDFile) Stat() fs.HashFileInfoI {
 	return df.info
 }
 

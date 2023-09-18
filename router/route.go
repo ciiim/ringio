@@ -3,7 +3,7 @@ package router
 import (
 	"log"
 
-	"github.com/ciiim/cloudborad/internal/fs"
+	dlogger "github.com/ciiim/cloudborad/internal/debug"
 	"github.com/ciiim/cloudborad/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -41,7 +41,7 @@ type ApiServer struct {
 }
 
 func InitApiServer(service *service.Service) *ApiServer {
-	if fs.IsDebug() {
+	if dlogger.IsDebug() {
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)

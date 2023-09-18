@@ -45,7 +45,7 @@ func main() {
 
 	stopChan := make(chan struct{})
 
-	s := server.NewServer(serverName, server.GetIP(), serverPort, stopChan, server.OPTION_NO_FRONT, server.OPTION_NO_STORE)
+	s := server.NewServer(serverName, server.GetIP(), serverPort, stopChan)
 
 	for _, node := range nodelist {
 		s.AddPeer(node["name"], node["addr"])

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
+	"github.com/ciiim/cloudborad/internal/fs/remote"
 )
 
 const (
@@ -18,9 +19,9 @@ type ServerOptions int
 
 func (s *Server) handleOptions(options ...ServerOptions) {
 	var (
-		front fs.TreeDFileSystemI = fs.DefaultTreeDFileSystem{}
-		store fs.HashDFileSystemI = fs.DefaultHashDFileSystem{}
-		ps    peers.Peer          = peers.DefaultPeer{}
+		front remote.TreeDFileSystemI = remote.DefaultTreeDFileSystem{}
+		store remote.HashDFileSystemI = remote.DefaultHashDFileSystem{}
+		ps    peers.Peer              = peers.DefaultPeer{}
 	)
 
 	var (
@@ -43,14 +44,19 @@ func (s *Server) handleOptions(options ...ServerOptions) {
 			bps = false
 		}
 	}
+	if bps {
+		ps = remote.NewDPeer("_fs_"+s.serverName, remote.WithPort(s._IP, s._Port), 20, nil)
+	}
 	if bfont {
-		front = fs.NewTreeDFileSystem("./_fs_/front_" + s.serverName)
+		t := remote.NewTreeDFileSystem("./_fs_/front_" + s.serverName)
+		t.SetPeerService(ps)
+		front = t
 	}
 	if bstore {
-		store = fs.NewDFS("./_fs_/store_"+s.serverName, 50*fs.GB, nil)
+		t := remote.NewDFS("./_fs_/store_"+s.serverName, 50*fs.GB, nil)
+		t.SetPeerService(ps)
+		store = t
 	}
-	if bps {
-		ps = fs.NewDPeer("_fs_"+s.serverName, fs.WithPort(s._IP, s._Port), 20, nil)
-	}
-	s.Group = fs.NewGroup(s.serverName, ps, front, store)
+
+	s.Group = remote.NewGroup(s.serverName, ps, front, store)
 }

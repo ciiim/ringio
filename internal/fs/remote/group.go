@@ -1,14 +1,15 @@
-package fs
+package remote
 
 import (
 	"log"
 
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 const (
-	GroupFSLimit int  = 1
-	BLOCK_SIZE   Byte = 1024 * 1024 * 5 // 5MB
+	GroupFSLimit int     = 1
+	BLOCK_SIZE   fs.Byte = 1024 * 1024 * 5 // 5MB
 )
 
 /*

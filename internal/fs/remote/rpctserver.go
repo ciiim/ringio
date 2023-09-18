@@ -1,8 +1,9 @@
-package fs
+package remote
 
 import (
 	"context"
 
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/fspb"
 )
 
@@ -32,11 +33,11 @@ func (r *rpcFSServer) DeleteDir(ctx context.Context, req *fspb.TreeFileSystemBas
 
 func (r *rpcFSServer) GetDirSub(ctx context.Context, req *fspb.TreeFileSystemBasicRequest) (*fspb.Subs, error) {
 	subs, err := r.tfs.GetDirSub(req.Space, req.Base, req.Name)
-	return &fspb.Subs{SubInfo: subsToPbSubs(subs)}, err
+	return &fspb.Subs{SubInfo: SubsToPbSubs(subs)}, err
 }
 
 func (r *rpcFSServer) NewSpace(ctx context.Context, space *fspb.NewSpaceRequest) (*fspb.Error, error) {
-	err := r.tfs.NewSpace(space.Space, Byte(space.Cap))
+	err := r.tfs.NewSpace(space.Space, fs.Byte(space.Cap))
 	if err != nil {
 		return &fspb.Error{Err: err.Error()}, nil
 	}

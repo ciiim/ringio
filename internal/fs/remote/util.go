@@ -1,15 +1,16 @@
-package fs
+package remote
 
 import (
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/fspb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func pBFileInfoToHashFileInfo(pb *fspb.HashFileInfo) HashFileInfo {
+func PBFileInfoToHashFileInfo(pb *fspb.HashFileInfo) fs.HashFileInfo {
 	if pb == nil {
-		return HashFileInfo{}
+		return fs.HashFileInfo{}
 	}
-	return HashFileInfo{
+	return fs.HashFileInfo{
 		Path_:    pb.BasePath,
 		FileName: pb.FileName,
 		Hash_:    pb.Hash,
@@ -18,19 +19,19 @@ func pBFileInfoToHashFileInfo(pb *fspb.HashFileInfo) HashFileInfo {
 	}
 }
 
-func pbSubsToSubs(pb []*fspb.SubInfo) []SubInfo {
-	var subs []SubInfo
+func PbSubsToSubs(pb []*fspb.SubInfo) []fs.SubInfo {
+	var subs []fs.SubInfo
 	for _, v := range pb {
-		subs = append(subs, SubInfo{
+		subs = append(subs, fs.SubInfo{
 			Name:    v.Name,
-			Type:    FILE_TYPE(v.Type),
+			Type:    fs.FILE_TYPE(v.Type),
 			ModTime: v.ModTime.AsTime(),
 		})
 	}
 	return subs
 }
 
-func subsToPbSubs(subs []SubInfo) []*fspb.SubInfo {
+func SubsToPbSubs(subs []fs.SubInfo) []*fspb.SubInfo {
 	var pbSubs []*fspb.SubInfo
 	for _, v := range subs {
 		pbSubs = append(pbSubs, &fspb.SubInfo{

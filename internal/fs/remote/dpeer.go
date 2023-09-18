@@ -1,11 +1,13 @@
-package fs
+package remote
 
 import (
 	"context"
 	"log"
 	"strings"
 
+	dlogger "github.com/ciiim/cloudborad/internal/debug"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
+	"github.com/ciiim/cloudborad/internal/fs/peers/chash"
 )
 
 type DAddr string
@@ -32,7 +34,7 @@ func (a DAddr) IP() string {
 
 type DPeer struct {
 	info    DPeerInfo
-	hashMap *peers.CMap
+	hashMap *chash.CMap
 }
 
 var _ peers.Peer = (*DPeer)(nil)
@@ -54,8 +56,8 @@ func NewDPeerInfo(name, addr string) DPeerInfo {
 
 var _ peers.PeerInfo = (*DPeerInfo)(nil)
 
-func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
-	dlog.debug("NewDPeer", "name: %s, addr: %s", name, addr)
+func NewDPeer(name, addr string, replicas int, peersHashFn chash.CHash) *DPeer {
+	dlogger.Dlog.LogDebugf("NewDPeer", "name: %s, addr: %s", name, addr)
 	info := DPeerInfo{
 		PeerName: name,
 		PeerAddr: DAddr(addr),
@@ -63,8 +65,10 @@ func NewDPeer(name, addr string, replicas int, peersHashFn peers.CHash) *DPeer {
 	}
 	p := &DPeer{
 		info:    info,
-		hashMap: peers.NewCMap(replicas, peersHashFn),
+		hashMap: chash.NewCMap(replicas, peersHashFn),
 	}
+
+	//Add self to hashMap
 	p.hashMap.Add(info)
 	return p
 }
@@ -94,7 +98,7 @@ recieve peer action from other peer
 source peer - pi_in
 */
 func (p DPeer) PSync(pi_in peers.PeerInfo, action peers.PeerActionType) error {
-	dlog.debug("PSync", "pi_in: %v, action: %s", pi_in, action.String())
+	dlogger.Dlog.LogDebugf("PSync", "pi_in: %v, action: %s", pi_in, action.String())
 	if pi_in.Equal(p.info) {
 		log.Println("[DPeer] Cannot Operate myself")
 		return nil
@@ -130,7 +134,7 @@ send peer action to other peer
 pi_to - destination peer
 */
 func (p DPeer) PActionTo(action peers.PeerActionType, pi_to ...peers.PeerInfo) error {
-	dlog.debug("PActionTo", "action: %s, pi_to: %v", action.String(), pi_to)
+	dlogger.Dlog.LogDebugf("PActionTo", "action: %s, pi_to: %v", action.String(), pi_to)
 	client := newRPCPeerClient()
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()

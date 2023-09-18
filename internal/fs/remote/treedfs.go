@@ -1,6 +1,7 @@
-package fs
+package remote
 
 import (
+	"github.com/ciiim/cloudborad/internal/fs"
 	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
@@ -11,7 +12,7 @@ const (
 // Distributed Tree File System.
 // Implement FileSystem interface
 type TreeDFileSystem struct {
-	*treeFileSystem
+	*fs.TreeFileSystem
 	remote *rpcTreeClient
 	self   peers.Peer
 }
@@ -21,7 +22,7 @@ var _ TreeDFileSystemI = (*TreeDFileSystem)(nil)
 func NewTreeDFileSystem(rootPath string) *TreeDFileSystem {
 	TreeDFileSystem := &TreeDFileSystem{
 		remote:         newRPCTreeClient(),
-		treeFileSystem: newTreeFileSystem(rootPath),
+		TreeFileSystem: fs.NewTreeFileSystem(rootPath),
 	}
 	return TreeDFileSystem
 
@@ -35,13 +36,13 @@ func (dt *TreeDFileSystem) pickPeer(key string) peers.PeerInfo {
 	return dt.self.Pick(key)
 }
 
-func (dt *TreeDFileSystem) NewSpace(space string, cap Byte) error {
+func (dt *TreeDFileSystem) NewSpace(space string, cap fs.Byte) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.NewSpace(space, cap)
+		return dt.TreeFileSystem.NewSpace(space, cap)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -51,10 +52,10 @@ func (dt *TreeDFileSystem) NewSpace(space string, cap Byte) error {
 func (dt *TreeDFileSystem) DeleteSpace(space string) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.DeleteSpace(space)
+		return dt.TreeFileSystem.DeleteSpace(space)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -64,10 +65,10 @@ func (dt *TreeDFileSystem) DeleteSpace(space string) error {
 func (dt *TreeDFileSystem) MakeDir(space, base, name string) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.MakeDir(space, base, name)
+		return dt.TreeFileSystem.MakeDir(space, base, name)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -77,10 +78,10 @@ func (dt *TreeDFileSystem) MakeDir(space, base, name string) error {
 func (dt *TreeDFileSystem) RenameDir(space, base, name, newName string) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		dt.treeFileSystem.RenameDir(space, base, name, newName)
+		dt.TreeFileSystem.RenameDir(space, base, name, newName)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -90,23 +91,23 @@ func (dt *TreeDFileSystem) RenameDir(space, base, name, newName string) error {
 func (dt *TreeDFileSystem) DeleteDir(space, base, name string) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.DeleteDir(space, base, name)
+		return dt.TreeFileSystem.DeleteDir(space, base, name)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
 	return dt.remote.deleteDir(ctx, pi, space, base, name)
 }
 
-func (dt *TreeDFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error) {
+func (dt *TreeDFileSystem) GetDirSub(space, base, name string) ([]fs.SubInfo, error) {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return nil, ErrSpaceNotFound
+		return nil, fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.GetDirSub(space, base, name)
+		return dt.TreeFileSystem.GetDirSub(space, base, name)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -116,10 +117,10 @@ func (dt *TreeDFileSystem) GetDirSub(space, base, name string) ([]SubInfo, error
 func (dt *TreeDFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return nil, ErrSpaceNotFound
+		return nil, fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.GetMetadata(space, base, name)
+		return dt.TreeFileSystem.GetMetadata(space, base, name)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -129,10 +130,10 @@ func (dt *TreeDFileSystem) GetMetadata(space, base, name string) ([]byte, error)
 func (dt *TreeDFileSystem) PutMetadata(space, base, name, hash string, data []byte) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.PutMetadata(space, base, name, hash, data)
+		return dt.TreeFileSystem.PutMetadata(space, base, name, hash, data)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
@@ -141,10 +142,10 @@ func (dt *TreeDFileSystem) PutMetadata(space, base, name, hash string, data []by
 func (dt *TreeDFileSystem) DeleteMetadata(space, base, name, hash string) error {
 	pi := dt.pickPeer(space)
 	if pi == nil {
-		return ErrSpaceNotFound
+		return fs.ErrSpaceNotFound
 	}
 	if dt.self.Info().Equal(pi) {
-		return dt.treeFileSystem.DeleteMetadata(space, base, name, hash)
+		return dt.TreeFileSystem.DeleteMetadata(space, base, name, hash)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
