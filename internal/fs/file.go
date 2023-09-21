@@ -2,8 +2,6 @@ package fs
 
 import (
 	"time"
-
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 type Byte = int64
@@ -24,6 +22,4 @@ type HashFileInfoI interface {
 	Hash() string //file's hash
 	Size() int64
 	ModTime() time.Time
-
-	PeerInfo() peers.PeerInfo
 }

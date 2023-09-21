@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ciiim/cloudborad/internal/dfs"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/remote"
 )
 
 //TODO: 事务(transaction)系统，提供事务接口，支持事务回滚，实现文件下载、上传、删除的事务
-//TODO: 秒传模块，相同Hash的文件秒传 DONE
+//TODO: 秒传模块，相同Hash的文件秒传,实现文件引用计数
 //TODO: 节点强一致性，保证节点信息一致性
 
 type downloadTask struct {
@@ -52,7 +52,7 @@ type Server struct {
 	serverName string
 	_IP        string
 	_Port      string
-	Group      *remote.Group
+	Group      *dfs.Group
 
 	storeMutex sync.RWMutex
 	storeMap   map[string]*storeBlocks
@@ -66,7 +66,7 @@ func NewServer(serverName, ip, port string, stopChan chan struct{}, options ...S
 		ip = GetIP()
 	}
 	if port == "" {
-		port = remote.RPC_FS_PORT
+		port = dfs.RPC_FS_PORT
 	}
 	log.Printf("[Server] New server <%s>-<%s>", serverName, ip)
 	server := &Server{

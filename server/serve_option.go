@@ -3,9 +3,9 @@ package server
 import (
 	"log"
 
+	"github.com/ciiim/cloudborad/internal/dfs"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
-	"github.com/ciiim/cloudborad/internal/fs/remote"
 )
 
 const (
@@ -19,9 +19,9 @@ type ServerOptions int
 
 func (s *Server) handleOptions(options ...ServerOptions) {
 	var (
-		front remote.TreeDFileSystemI = remote.DefaultTreeDFileSystem{}
-		store remote.HashDFileSystemI = remote.DefaultHashDFileSystem{}
-		ps    peers.Peer              = peers.DefaultPeer{}
+		front dfs.TreeDFileSystemI = dfs.DefaultTreeDFileSystem{}
+		store dfs.HashDFileSystemI = dfs.DefaultHashDFileSystem{}
+		ps    peers.Peer           = peers.DefaultPeer{}
 	)
 
 	var (
@@ -45,18 +45,18 @@ func (s *Server) handleOptions(options ...ServerOptions) {
 		}
 	}
 	if bps {
-		ps = remote.NewDPeer("_fs_"+s.serverName, remote.WithPort(s._IP, s._Port), 20, nil)
+		ps = dfs.NewDPeer("_fs_"+s.serverName, dfs.WithPort(s._IP, s._Port), 20, nil, dfs.DefaultSyncSettings) //FIXME:不要使用默认配置
 	}
 	if bfont {
-		t := remote.NewTreeDFileSystem("./_fs_/front_" + s.serverName)
+		t := dfs.NewTreeDFileSystem("./_fs_/front_" + s.serverName)
 		t.SetPeerService(ps)
 		front = t
 	}
 	if bstore {
-		t := remote.NewDFS("./_fs_/store_"+s.serverName, 50*fs.GB, nil)
-		t.SetPeerService(ps)
+		t := dfs.NewDFS("./_fs_/store_"+s.serverName, 50*fs.GB, nil)
+		t.SetPeer(ps)
 		store = t
 	}
 
-	s.Group = remote.NewGroup(s.serverName, ps, front, store)
+	s.Group = dfs.NewGroup(s.serverName, ps, front, store)
 }

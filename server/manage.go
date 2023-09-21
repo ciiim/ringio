@@ -4,8 +4,8 @@ import (
 	"log"
 
 	dlogger "github.com/ciiim/cloudborad/internal/debug"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
-	"github.com/ciiim/cloudborad/internal/fs/remote"
+	"github.com/ciiim/cloudborad/internal/dfs"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 )
 
 func (s *Server) ServerInfo() (string, string) {
@@ -19,7 +19,7 @@ func (s *Server) AddPeer(name, addr string) {
 func (s *Server) JoinCluster(name, addr string) error {
 	//boradcast to group and get all peers of the group
 
-	dest := remote.NewDPeerInfo(name, addr)
+	dest := dfs.NewDPeerInfo(name, addr)
 
 	//Join Cluster
 	err := s.Group.PeerService.PActionTo(peers.P_ACTION_JOIN, dest)
@@ -35,7 +35,7 @@ func (s *Server) JoinCluster(name, addr string) error {
 
 	//Add to peer map
 	for _, peer := range peerList {
-		_ = s.Group.PeerService.PSync(peer, peers.P_ACTION_NEW)
+		_ = s.Group.PeerService.PHandleSyncAction(peer, peers.P_ACTION_NEW)
 	}
 
 	return nil

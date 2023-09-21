@@ -12,7 +12,6 @@ import (
 
 	"github.com/ciiim/cloudborad/internal/database"
 	dlogger "github.com/ciiim/cloudborad/internal/debug"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -384,8 +383,4 @@ func (bfi HashFileInfo) ModTime() time.Time {
 
 func (bfi HashFileInfo) Mode() os.FileMode {
 	return 0
-}
-
-func (bfi HashFileInfo) PeerInfo() peers.PeerInfo {
-	return nil
 }
