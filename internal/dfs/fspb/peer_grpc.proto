@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+import "internal/dfs/fspb/error.proto";
+
+package fspb;
+
+option go_package = "cloudborad/internal/dfs/fspb";
+
+enum PeerAction {
+    P_ACTION_NONE = 0;
+    P_ACTION_OFFLINE = 1;
+    P_ACTION_ONLINE = 2;
+    P_ACTION_JOIN = 3;
+    P_ACTION_NEW = 4;
+    P_ACTION_QUIT = 5;
+}
+
+message PeerInfo {
+    string name = 1;
+    string addr = 2;
+    int64 stat = 3;
+    int64 action = 4;
+}
+
+message SyncPing {
+    repeated int64 peer_id = 1;
+    int64 version = 2;
+}
+
+message SyncPong {
+    bool need_sync = 1;
+    int64 version = 2;
+}
+
+message SyncPullRequest {
+    PeerInfo source = 1;
+    int64 version = 2;
+}
+
+message SyncPullResponse {
+    repeated PeerInfo peers = 1;
+    int64 version = 2;
+}
+
+enum GossipMsgType {
+    G_MSG_JOIN = 0;
+}
+
+message GossipMsg {
+    GossipMsgType msg_type = 1;
+    PeerInfo target = 2;
+}
+
+message GossipAck {
+    GossipMsgType msg_type = 1;
+    bool boring = 2;
+}
+
+
+message PeerList {
+    repeated PeerInfo peers = 1;
+}
+
+service PeerService {
+    rpc ListPeer(google.protobuf.Empty) returns (PeerList) {}
+    rpc PeerSync(PeerInfo) returns (Error) {}
+
+    rpc Sync(SyncPing) returns (SyncPong) {}
+    rpc SyncPull(SyncPullRequest) returns (SyncPullResponse) {}
+    rpc Gossip(GossipMsg) returns (GossipAck) {}
+}

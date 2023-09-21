@@ -1,10 +1,10 @@
-package remote
+package dfs
 
 import (
 	"log"
 
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 const (
@@ -104,10 +104,10 @@ func (g *Group) PeerList() []DPeerInfo {
 }
 
 func (g *Group) SyncPeer(pi peers.PeerInfo, action peers.PeerActionType) error {
-	err := g.FrontSystem.Peer().PSync(pi, action)
+	err := g.FrontSystem.Peer().PHandleSyncAction(pi, action)
 	if err != nil {
 		return err
 	}
-	err = g.StoreSystem.Peer().PSync(pi, action)
+	err = g.StoreSystem.Peer().PHandleSyncAction(pi, action)
 	return err
 }

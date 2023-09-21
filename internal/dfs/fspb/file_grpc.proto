@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-import "internal/fs/fspb/fileinfo.proto";
-import "internal/fs/fspb/peer_grpc.proto";
-import "internal/fs/fspb/error.proto";
+import "internal/dfs/fspb/fileinfo.proto";
+import "internal/dfs/fspb/peer_grpc.proto";
+import "internal/dfs/fspb/error.proto";
 
 package fspb;
 
-option go_package = "cloudborad/internal/fs/fspb";
+option go_package = "cloudborad/internal/dfs/fspb";
 
 message Key {
     string key = 1;

@@ -3,7 +3,7 @@ package chash_test
 import (
 	"testing"
 
-	"github.com/ciiim/cloudborad/internal/fs/peers/chash"
+	"github.com/ciiim/cloudborad/internal/dfs/peers/chash"
 )
 
 func TestCMap(t *testing.T) {

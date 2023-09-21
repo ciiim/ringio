@@ -1,11 +1,11 @@
-package remote
+package dfs
 
 import (
 	"context"
 
-	"github.com/ciiim/cloudborad/internal/fs/peers"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 
-	"github.com/ciiim/cloudborad/internal/fs/fspb"
+	"github.com/ciiim/cloudborad/internal/dfs/fspb"
 )
 
 func (r *rpcFSServer) Get(ctx context.Context, key *fspb.Key) (*fspb.GetResponse, error) {
@@ -14,7 +14,6 @@ func (r *rpcFSServer) Get(ctx context.Context, key *fspb.Key) (*fspb.GetResponse
 		return nil, err
 	}
 	fi := file.Stat()
-
 	return &fspb.GetResponse{
 		Data: file.Data(),
 		FileInfo: &fspb.HashFileInfo{

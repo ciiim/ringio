@@ -1,11 +1,11 @@
-package remote
+package dfs
 
 import (
 	"log"
 	"net"
 
-	"github.com/ciiim/cloudborad/internal/fs/fspb"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
+	"github.com/ciiim/cloudborad/internal/dfs/fspb"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"google.golang.org/grpc"
 )
 

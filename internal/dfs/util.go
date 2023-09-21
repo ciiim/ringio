@@ -1,8 +1,8 @@
-package remote
+package dfs
 
 import (
+	"github.com/ciiim/cloudborad/internal/dfs/fspb"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/fspb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

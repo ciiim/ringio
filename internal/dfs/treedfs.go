@@ -1,8 +1,8 @@
-package remote
+package dfs
 
 import (
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 const (

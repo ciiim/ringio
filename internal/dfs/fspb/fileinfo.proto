@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package fspb;
 
-option go_package = "cloudborad/internal/fs/fspb";
+option go_package = "cloudborad/internal/dfs/fspb";
 
 import "google/protobuf/timestamp.proto";
 

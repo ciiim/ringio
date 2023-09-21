@@ -1,4 +1,4 @@
-package remote
+package dfs
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"log"
 	"time"
 
+	dlogger "github.com/ciiim/cloudborad/internal/debug"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 
-	"github.com/ciiim/cloudborad/internal/fs/fspb"
+	"github.com/ciiim/cloudborad/internal/dfs/fspb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -52,9 +53,34 @@ Peer Method Start
 
 */
 
+func (c *rpcPeerClient) Ping(self, dst DPeerInfo, pIDList []int64, resp *pingRO) error {
+	dlogger.Dlog.LogDebugf("[RPC Client]", " Ping: %s to %s\n", self.PAddr(), dst.PAddr())
+	conn, err := grpc.Dial(dst.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("[RPC Client] Dial %s error: %s", dst.PAddr(), err.Error())
+		return err
+	}
+
+	client := fspb.NewPeerServiceClient(conn)
+
+	ctx, cancel := ctxWithTimeout()
+	defer cancel()
+	remoteResp, err := client.Sync(ctx, &fspb.SyncPing{
+		PeerId:  pIDList,
+		Version: self.PVersion(),
+	})
+	if err != nil {
+		log.Printf("[RPC Client] Sync %s error: %s", dst.PAddr(), err.Error())
+		return err
+	}
+	resp.needSync = resp.needSync
+	resp.version = remoteResp.Version
+	return nil
+}
+
 func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo, action peers.PeerActionType, pis ...peers.PeerInfo) error {
 	for _, pi := range pis {
-		log.Printf("[RPC Client] PeerAction: %s to %s\n", action.String(), pi.PAddr())
+		dlogger.Dlog.LogDebugf("[RPC Client]", " PeerAction: %s to %s\n", action.String(), pi.PAddr())
 		conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Printf("[RPC Client] Dial %s error: %s", pi.PAddr(), err.Error())
@@ -62,6 +88,7 @@ func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo,
 		}
 
 		client := fspb.NewPeerServiceClient(conn)
+
 		_, err = client.PeerSync(ctx, &fspb.PeerInfo{
 			Name:   target.PName(),
 			Addr:   target.PAddr().String(),
@@ -78,7 +105,7 @@ func (c *rpcPeerClient) peerActionTo(ctx context.Context, target peers.PeerInfo,
 }
 
 func (c *rpcPeerClient) getPeerList(ctx context.Context, pi peers.PeerInfo) ([]peers.PeerInfo, error) {
-	log.Printf("[RPC Client] GetPeerList from %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "GetPeerList from %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -110,7 +137,7 @@ rpcHashClient Method Start
 */
 
 func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) (HashDFile, error) {
-	log.Printf("[RPC Client] Get from %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "Get from %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return HashDFile{}, err
@@ -137,7 +164,7 @@ func (c *rpcHashClient) get(ctx context.Context, pi peers.PeerInfo, key string) 
 }
 
 func (c *rpcHashClient) put(ctx context.Context, pi peers.PeerInfo, key string, filename string, value []byte) error {
-	log.Printf("[RPC Client] Put to %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "Put to %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -154,7 +181,7 @@ func (c *rpcHashClient) put(ctx context.Context, pi peers.PeerInfo, key string, 
 }
 
 func (c *rpcHashClient) delete(ctx context.Context, pi peers.PeerInfo, key string) error {
-	log.Printf("[RPC Client] Delete file in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "Delete file in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -182,7 +209,7 @@ newRPCTreeClient Method Start
 */
 
 func (r *rpcTreeClient) getMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string) ([]byte, error) {
-	log.Printf("[RPC Client] GetMetadata from %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "GetMetadata from %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -202,7 +229,7 @@ func (r *rpcTreeClient) getMetadata(ctx context.Context, pi peers.PeerInfo, spac
 }
 
 func (r *rpcTreeClient) putMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name string, data []byte) error {
-	log.Printf("[RPC Client] PutMetadata to %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "PutMetadata to %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -227,7 +254,7 @@ func (r *rpcTreeClient) putMetadata(ctx context.Context, pi peers.PeerInfo, spac
 }
 
 func (r *rpcTreeClient) deleteMetadata(ctx context.Context, pi peers.PeerInfo, space string, base string, name, hash string) error {
-	log.Printf("[RPC Client] DeleteMetadata in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "DeleteMetadata in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -248,7 +275,7 @@ func (r *rpcTreeClient) deleteMetadata(ctx context.Context, pi peers.PeerInfo, s
 }
 
 func (r *rpcTreeClient) makeDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) error {
-	log.Printf("[RPC Client] MakeDir in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "MakeDir in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -268,7 +295,7 @@ func (r *rpcTreeClient) makeDir(ctx context.Context, pi peers.PeerInfo, space st
 }
 
 func (r *rpcTreeClient) renameDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string, newName string) error {
-	log.Printf("[RPC Client] RenameDir in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "RenameDir in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -291,7 +318,7 @@ func (r *rpcTreeClient) renameDir(ctx context.Context, pi peers.PeerInfo, space 
 }
 
 func (r *rpcTreeClient) deleteDir(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) error {
-	log.Printf("[RPC Client] DeleteDir in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "DeleteDir in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -311,7 +338,7 @@ func (r *rpcTreeClient) deleteDir(ctx context.Context, pi peers.PeerInfo, space 
 }
 
 func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space string, base string, dir string) ([]fs.SubInfo, error) {
-	log.Printf("[RPC Client] GetDirSub from %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "GetDirSub from %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -331,7 +358,7 @@ func (r *rpcTreeClient) getDirSub(ctx context.Context, pi peers.PeerInfo, space 
 }
 
 func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space string, cap fs.Byte) error {
-	log.Printf("[RPC Client] NewSpace in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "NewSpace in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -350,7 +377,7 @@ func (r *rpcTreeClient) newSpace(ctx context.Context, pi peers.PeerInfo, space s
 }
 
 func (r *rpcTreeClient) deleteSpace(ctx context.Context, pi peers.PeerInfo, space string) error {
-	log.Printf("[RPC Client] DeleteSpace in %s", pi.PAddr())
+	dlogger.Dlog.LogDebugf("[RPC Client]", "DeleteSpace in %s", pi.PAddr())
 	conn, err := grpc.Dial(pi.PAddr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err

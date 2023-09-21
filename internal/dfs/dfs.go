@@ -1,12 +1,17 @@
-package remote
+package dfs
 
 import (
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 type HashDFileSystemI interface {
-	fs.HashFileSystemI
+	Store(key, name string, value []byte) error
+	Get(key string) (HashDFileI, error)
+	Delete(key string) error
+	Cap() int64
+	Occupied(unit ...string) float64
+	Close() error
 	Peer() peers.Peer
 }
 
@@ -33,7 +38,7 @@ func (DefaultHashDFileSystem) Store(key, name string, value []byte) error {
 	return nil
 }
 
-func (DefaultHashDFileSystem) Get(key string) (fs.HashFileI, error) {
+func (DefaultHashDFileSystem) Get(key string) (HashDFileI, error) {
 	return nil, nil
 }
 

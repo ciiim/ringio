@@ -1,4 +1,4 @@
-package remote
+package dfs
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"log"
 
 	dlogger "github.com/ciiim/cloudborad/internal/debug"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"github.com/ciiim/cloudborad/internal/fs"
-	"github.com/ciiim/cloudborad/internal/fs/peers"
 )
 
 type HashDFile struct {
@@ -29,7 +29,7 @@ type HashDFileSystem struct {
 }
 
 var _ HashDFileSystemI = (*HashDFileSystem)(nil)
-var _ fs.HashFileInfoI = (*HashDFileInfo)(nil)
+var _ HashDFileInfoI = (*HashDFileInfo)(nil)
 
 func (d *HashDFileSystem) AddPeer(pis ...peers.PeerInfo) error {
 	d.self.PAdd(pis...)
@@ -48,11 +48,11 @@ func NewDFS(rootPath string, capacity int64, calcStorePathFn fs.CalcStoreFilePat
 	return d
 }
 
-func (d *HashDFileSystem) SetPeerService(ps peers.Peer) {
+func (d *HashDFileSystem) SetPeer(ps peers.Peer) {
 	d.self = ps
 }
 
-func (d *HashDFileSystem) Get(key string) (fs.HashFileI, error) {
+func (d *HashDFileSystem) Get(key string) (HashDFileI, error) {
 	dlogger.Dlog.LogDebugf("[HashDFileSystem]", "Get by key '%s'", key)
 	pi := d.PickPeer(key)
 	if pi == nil {
@@ -165,7 +165,7 @@ func (d *HashDFileSystem) recoverFile(key string) (HashDFile, error) {
 		return HashDFile{}, fs.ErrFileNotFound
 	}
 	// Get file info from next peer
-	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
+	ctx, cancel := ctxWithTimeout()
 	defer cancel()
 	resp, err := d.remote.get(ctx, nextInfo, key)
 	if err == nil {
@@ -182,7 +182,7 @@ func (df HashDFile) Data() []byte {
 	return df.data
 }
 
-func (df HashDFile) Stat() fs.HashFileInfoI {
+func (df HashDFile) Stat() HashDFileInfoI {
 	return df.info
 }
 

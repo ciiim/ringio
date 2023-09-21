@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/ciiim/cloudborad/internal/fs/peers"
+	dlogger "github.com/ciiim/cloudborad/internal/debug"
+	"github.com/ciiim/cloudborad/internal/dfs/peers"
 	"golang.org/x/exp/slices"
 )
 
@@ -14,12 +15,12 @@ type CHash func([]byte) uint32
 
 // Consistent hash Map
 type CMap struct {
-	replicas      int
-	hash          CHash
+	replicas int
+	hash     CHash
+
+	rwmu          sync.RWMutex
 	realPeerInfos []peers.PeerInfo
 	peerInfosHash []int
-
-	rwmu sync.RWMutex
 
 	hashMap sync.Map
 }
@@ -46,9 +47,10 @@ func (m *CMap) Add(infos ...peers.PeerInfo) {
 			m.rwmu.Lock()
 			m.addRealNode(pi)
 			for i := 0; i < m.replicas; i++ {
-				hash := int(m.hash([]byte(strconv.Itoa(i) + pi.PName())))
-				m.hashMap.Store(hash, pi)
-				m.peerInfosHash = append(m.peerInfosHash, hash)
+				hashid := int(m.hash([]byte(strconv.Itoa(i) + strconv.FormatInt(pi.PID(), 10))))
+				dlogger.Dlog.LogDebugf("[CMap] Peer Add", "hashid: %d, pid: %d", hashid, pi.PID())
+				m.hashMap.Store(hashid, pi)
+				m.peerInfosHash = append(m.peerInfosHash, hashid)
 			}
 			m.rwmu.Unlock()
 			wg.Done()
@@ -91,7 +93,6 @@ func (m *CMap) Get(key string) peers.PeerInfo {
 	m.rwmu.Lock()
 	defer m.rwmu.Unlock()
 	info, _ := m.hashMap.Load(m.peerInfosHash[index%len(m.peerInfosHash)])
-
 	return info.(peers.PeerInfo)
 }
 
@@ -118,8 +119,6 @@ func (m *CMap) List() []peers.PeerInfo {
 When new peer added, some file needs to be moved to new peer.
 
 So we need to get next peer to find the file.
-
-You should incrase next if you cannot find the file in current peer.
 */
 func (m *CMap) GetPeerNext(key string, next int) peers.PeerInfo {
 	if len(m.peerInfosHash) == 0 {
