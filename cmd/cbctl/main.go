@@ -14,7 +14,7 @@ func main() {
 	app := cli.NewApp()
 	app.Commands = []*cli.Command{
 		versionCmd,
-		peerRootCmd,
+		nodeRootCmd,
 	}
 	app.Flags = []cli.Flag{
 		connectFlag,

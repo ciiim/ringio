@@ -13,37 +13,37 @@ var (
 			return nil
 		},
 	}
-	peerRootCmd *cli.Command = &cli.Command{
-		Name:    "peer",
+	nodeRootCmd *cli.Command = &cli.Command{
+		Name:    "node",
 		Aliases: []string{"p"},
 		Usage:   "Peer management",
 		Subcommands: []*cli.Command{
-			peerJoinToCmd,
-			peerListCmd,
-			peerQuitFromCmd,
+			nodeJoinToCmd,
+			nodeListCmd,
+			nodeQuitFromCmd,
 		},
 	}
 )
 
 var (
-	//peer commands
-	peerJoinToCmd *cli.Command = &cli.Command{
+	//node commands
+	nodeJoinToCmd *cli.Command = &cli.Command{
 		Name:  "join",
-		Usage: "Join to peer",
+		Usage: "Join to node",
 		Action: func(c *cli.Context) error {
 			return nil
 		},
 	}
-	peerListCmd *cli.Command = &cli.Command{
+	nodeListCmd *cli.Command = &cli.Command{
 		Name:  "list",
-		Usage: "List peers",
+		Usage: "List nodes",
 		Action: func(c *cli.Context) error {
 			return nil
 		},
 	}
-	peerQuitFromCmd *cli.Command = &cli.Command{
+	nodeQuitFromCmd *cli.Command = &cli.Command{
 		Name:  "quit",
-		Usage: "Quit from peer",
+		Usage: "Quit from node",
 		Action: func(c *cli.Context) error {
 			return nil
 		},

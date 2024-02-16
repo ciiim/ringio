@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+import "ringio/fspb/chunkinfo.proto";
+import "ringio/fspb/error.proto";
+
+package fspb;
+
+option go_package = "cloudborad/ringio/fspb";
+
+message Key {
+    bytes key = 1;
+}
+
+message PutRequest {
+    Key key = 1;
+    string chunk_name = 2;
+    bytes data = 3;
+}
+
+message GetResponse {
+    Error error = 1;
+    bytes data = 2;
+    HashChunkInfo chunk_info = 3;
+}
+
+service HashChunkSystemService {
+    rpc Get(Key) returns (stream GetResponse) {}
+    rpc Put(stream PutRequest) returns (Error) {}
+    rpc Delete(Key) returns (Error) {}
+}
+
+

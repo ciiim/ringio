@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package fspb;
+
+option go_package = "cloudborad/ringio/fspb";
+
+message Error {
+    string operation = 1;
+    string err = 2;
+}
