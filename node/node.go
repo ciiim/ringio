@@ -2,14 +2,13 @@
 package node
 
 import (
-	"hash/crc32"
 	"net"
 
 	"github.com/ciiim/cloudborad/node/chash"
 )
 
 type Node struct {
-	nodeID   int64
+	nodeID   string
 	nodeIP   string
 	nodePort string
 	nodeName string
@@ -18,7 +17,7 @@ type Node struct {
 var _ chash.CHashItem = (*Node)(nil)
 
 func NewNode(nodeAddr string, uniqueNodeName string) *Node {
-	id := int64(crc32.ChecksumIEEE([]byte(uniqueNodeName)))
+	id := nodeAddr + uniqueNodeName
 	addr, port, _ := net.SplitHostPort(nodeAddr)
 	return &Node{
 		nodeID:   id,
@@ -56,6 +55,6 @@ func (n *Node) Port() string {
 	return n.nodePort
 }
 
-func (n *Node) ID() int64 {
+func (n *Node) ID() string {
 	return n.nodeID
 }

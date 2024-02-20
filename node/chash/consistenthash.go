@@ -2,15 +2,17 @@ package chash
 
 import (
 	"hash/crc64"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
+	"unsafe"
 )
 
 type ConsistentHashFn func([]byte) uint64
 
 type CHashItem interface {
-	ID() int64
+	ID() string
 	Compare(o CHashItem) bool
 }
 
@@ -31,7 +33,7 @@ func warp2InnerItem(real CHashItem, virtual bool) *innerItem {
 	}
 }
 
-func (i *innerItem) ID() int64 {
+func (i *innerItem) ID() string {
 	return i.real.ID()
 }
 
@@ -55,30 +57,51 @@ type ConsistentHash struct {
 	hashRingMutex sync.RWMutex
 
 	//hash ring 包含虚拟节点
-	hashRing []int
+	hashRing []uint64
 
 	//node info map 包含虚拟节点
-	hashMap map[int]CHashItem
+	hashMap map[uint64]CHashItem
+
+	//用于PickN的map
+	findNMap map[string]CHashItem
 }
+
+var (
+	DefaultHashFn = func(b []byte) uint64 {
+		return crc64.Checksum(b, crc64.MakeTable(crc64.ISO))
+	}
+)
 
 func NewConsistentHash(replicas int, fn ConsistentHashFn) *ConsistentHash {
 	m := &ConsistentHash{
 		replicas:      replicas,
 		hashFn:        fn,
 		hashRingMutex: sync.RWMutex{},
-		hashRing:      make([]int, 0),
-		hashMap:       make(map[int]CHashItem),
+		hashRing:      make([]uint64, 0),
+		hashMap:       make(map[uint64]CHashItem),
 	}
 
 	if fn == nil {
-		table := crc64.MakeTable(crc64.ISO)
-		f := func(b []byte) uint64 {
-			return crc64.Checksum(b, table)
-		}
-		m.hashFn = f
+		m.hashFn = DefaultHashFn
 	}
 	return m
 
+}
+
+// []byte READ ONLY
+func string2Bytes(s string) (readOnly []byte) {
+	sd := unsafe.StringData(s)
+	return unsafe.Slice(sd, len(s))
+}
+
+func (c *ConsistentHash) GetByID(id string) CHashItem {
+	c.hashRingMutex.RLock()
+	defer c.hashRingMutex.RUnlock()
+	item, ok := c.hashMap[c.hashFn(string2Bytes(id))]
+	if !ok {
+		return nil
+	}
+	return item.(*innerItem).real
 }
 
 func (c *ConsistentHash) Add(item CHashItem) {
@@ -86,7 +109,7 @@ func (c *ConsistentHash) Add(item CHashItem) {
 	defer c.hashRingMutex.Unlock()
 
 	//添加真实节点
-	hashid := int(c.hashFn([]byte(strconv.FormatInt(item.ID(), 10))))
+	hashid := c.hashFn(string2Bytes(item.ID()))
 
 	//添加真实节点到hashMap
 	c.hashMap[hashid] = warp2InnerItem(item, false)
@@ -96,11 +119,11 @@ func (c *ConsistentHash) Add(item CHashItem) {
 
 	//添加虚拟节点
 	for i := 0; i < c.replicas; i++ {
-		hashid := int(c.hashFn([]byte(strconv.Itoa(i) + strconv.FormatInt(item.ID(), 10))))
+		hashid := c.hashFn(string2Bytes(strconv.Itoa(i) + item.ID()))
 		c.hashMap[hashid] = warp2InnerItem(item, true)
 		c.hashRing = append(c.hashRing, hashid)
 	}
-	sort.Ints(c.hashRing)
+	slices.Sort[[]uint64](c.hashRing)
 }
 
 func (c *ConsistentHash) Del(item CHashItem) {
@@ -108,7 +131,7 @@ func (c *ConsistentHash) Del(item CHashItem) {
 	defer c.hashRingMutex.Unlock()
 
 	//删除真实节点
-	hash := int(c.hashFn([]byte(strconv.FormatInt(item.ID(), 10))))
+	hash := c.hashFn(string2Bytes(item.ID()))
 	i, found := sort.Find(len(c.hashRing), func(i int) int {
 		return func() int {
 			if c.hashRing[i] < hash {
@@ -127,7 +150,7 @@ func (c *ConsistentHash) Del(item CHashItem) {
 	delete(c.hashMap, hash)
 
 	for i := 0; i < c.replicas; i++ {
-		hash := int(c.hashFn([]byte(strconv.Itoa(i) + strconv.FormatInt(item.ID(), 10))))
+		hash := c.hashFn(string2Bytes(strconv.Itoa(i) + item.ID()))
 		delete(c.hashMap, hash)
 		//删除虚拟节点
 		i, found := sort.Find(len(c.hashRing), func(i int) int {
@@ -156,7 +179,7 @@ func (c *ConsistentHash) Get(key []byte) CHashItem {
 	if len(c.hashRing) == 0 {
 		return nil
 	}
-	hash := int(c.hashFn(key))
+	hash := c.hashFn(key)
 	index := sort.Search(len(c.hashRing), func(i int) bool { return c.hashRing[i] >= hash })
 	item := c.hashMap[c.hashRing[index%len(c.hashRing)]]
 	realItem, ok := item.(*innerItem)
@@ -168,51 +191,62 @@ func (c *ConsistentHash) Get(key []byte) CHashItem {
 }
 
 // 获取key最接近的节点以及后 n 个不相同的节点
-// 如果节点数不足 n 个，则返回所有节点
+// 如果节点数不足 n 个，则返回所有不重复的节点
 func (c *ConsistentHash) GetN(key []byte, n int) []CHashItem {
-
-	c.hashRingMutex.RLock()
-	defer c.hashRingMutex.RUnlock()
-
 	if n <= 0 {
 		return nil
 	}
+
+	c.hashRingMutex.RLock()
+	defer c.hashRingMutex.RUnlock()
 
 	if len(c.hashRing) == 0 {
 		return nil
 	}
 
-	if len(c.hashRing) <= n {
-		items := make([]CHashItem, len(c.hashRing))
-		for i := 0; i < len(c.hashRing); i++ {
-			items[i] = c.hashMap[c.hashRing[i]].(*innerItem).real
-		}
-		return items
+	// 懒加载
+	if c.findNMap == nil {
+		c.findNMap = make(map[string]CHashItem)
 	}
 
-	hash := int(c.hashFn(key))
+	// Find结束后清理findNMap
+	defer func() {
+		clear(c.findNMap)
+	}()
+
+	hash := c.hashFn(key)
+
+	// 获取最接近的节点
 	index := sort.Search(len(c.hashRing), func(i int) bool { return c.hashRing[i] >= hash })
 	items := make([]CHashItem, n)
 
-	items[0] = c.hashMap[c.hashRing[index%len(c.hashRing)]]
+	items[0] = c.hashMap[c.hashRing[index%len(c.hashRing)]].(*innerItem).real
 
-	for i := 0; i < n; {
-		item := c.hashMap[c.hashRing[(index+i)%len(c.hashRing)]]
-		if compare(item.(*innerItem), items[:i]...) {
+	// 剩余需要遍历的节点数
+	remaining := len(c.hashRing) - 1
+
+	// 获取后 n-1 个不相同的节点
+	index++
+	for count := 1; count < n && remaining > 0; func() {
+		index++
+		remaining--
+	}() {
+		item := c.hashMap[c.hashRing[index%len(c.hashRing)]]
+
+		// 如果节点已经存在，则跳过
+		if compare(item, c.findNMap) {
 			continue
 		}
-		items[i] = item.(*innerItem).real
-		i++
+
+		// 添加节点
+		items[count] = item.(*innerItem).real
+		c.findNMap[item.ID()] = item
+		count++
 	}
-	items[0] = items[0].(*innerItem).real
 	return items
 }
 
-func compare(a CHashItem, b ...CHashItem) bool {
-	for _, v := range b {
-		if a.Compare(v) {
-			return true
-		}
-	}
-	return false
+func compare(a CHashItem, m map[string]CHashItem) bool {
+	_, ok := m[a.ID()]
+	return ok
 }

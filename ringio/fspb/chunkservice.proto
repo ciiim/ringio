@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ringio/fspb/chunkinfo.proto";
 import "ringio/fspb/error.proto";
+import "ringio/fspb/chunk-replica-info.proto";
 
 package fspb;
 
@@ -27,6 +28,12 @@ service HashChunkSystemService {
     rpc Get(Key) returns (stream GetResponse) {}
     rpc Put(stream PutRequest) returns (Error) {}
     rpc Delete(Key) returns (Error) {}
+
+    rpc PutReplica(stream PutReplicaRequest) returns (Error) {}
+    rpc GetReplica(Key) returns (stream GetReplicaResponse) {}
+    rpc DeleteReplica(Key) returns (Error) {}
+    rpc CheckReplica(CheckReplicaRequest) returns (Error) {}
+    rpc SyncReplicaInfo(ReplicaChunkInfo) returns (Error) {}
 }
 
 

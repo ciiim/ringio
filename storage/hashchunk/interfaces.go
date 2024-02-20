@@ -23,6 +23,7 @@ type IHashChunk interface {
 
 type IHashChunkInfo interface {
 	Name() string
+	Count() int64
 	Path() string //base path
 	Hash() []byte //chunk's hash
 	Size() int64

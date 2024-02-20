@@ -37,3 +37,28 @@ func TestTempFile(t *testing.T) {
 		t.Log(string(chunkBuffer[:n]))
 	}
 }
+
+var (
+	data1 = "hello world"
+	data2 = "hello world2"
+)
+
+var (
+	data3 = uint64(1234567890)
+	data4 = uint64(1234567891)
+)
+
+func BenchmarkCompareString(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		if data1 == data2 {
+			continue
+		}
+	}
+}
+func BenchmarkCompareUint64(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		if data3 == data4 {
+			continue
+		}
+	}
+}

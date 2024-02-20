@@ -11,7 +11,6 @@ const (
 type HashChunkInfo struct {
 
 	// 块的引用计数
-	// -1 表示为远程块文件
 	ChunkCount int64 `json:"count"`
 
 	ChunkName       string    `json:"chunk_name"`
@@ -38,6 +37,10 @@ func NewChunkInfo(chunkName string, hashSum []byte, size int64) *HashChunkInfo {
 func (hcstat *HashChunkInfo) SetPath(path string) *HashChunkInfo {
 	hcstat.ChunkPath = path
 	return hcstat
+}
+
+func (hcstat *HashChunkInfo) Count() int64 {
+	return hcstat.ChunkCount
 }
 
 func (hcstat *HashChunkInfo) Name() string {

@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package fspb;
+
+option go_package = "cloudborad/ringio/fspb";
+
+import "ringio/fspb/chunkinfo.proto";
+import "ringio/fspb/error.proto";
+
+
+/*
+putReplica func(nodeID string, reader io.Reader, info *ReplicaObjectInfo) error
+
+getReplica func(nodeID string, key []byte) (io.ReadCloser, *ReplicaObjectInfo, error)
+
+delReplica func(nodeID string, info *ReplicaObjectInfo) error
+
+checkReplica func(nodeID string, info *ReplicaObjectInfo) error
+
+syncReplicaInfo func(info *ReplicaObjectInfo) error
+*/
+
+message ReplicaChunkInfo {
+
+    HashChunkInfo chunk_info = 1;
+
+    bool master = 2;
+
+    int64 replica_count = 3;
+
+    bytes checksum = 4;
+
+    repeated string node_ids = 5;
+
+    //custom map[string]string
+    map<string, string> custom = 6;
+
+}
+
+// Stream
+message PutReplicaRequest {
+    bytes data = 1;
+    ReplicaChunkInfo info = 2;
+}
+
+// Stream
+message GetReplicaResponse {
+    bytes data = 1;
+    ReplicaChunkInfo info = 2;
+    Error error = 3;
+}
+
+message CheckReplicaRequest {
+    ReplicaChunkInfo info = 1;
+}
+
+
+message SyncReplicaInfoRequest {
+    ReplicaChunkInfo info = 1;
+}
+

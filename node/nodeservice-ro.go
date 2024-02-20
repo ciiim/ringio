@@ -26,6 +26,15 @@ func (ns *NodeServiceRO) Pick(key []byte) *Node {
 	return ns.cMap.Get(key)
 }
 
+func (ns *NodeServiceRO) GetByNodeID(nodeID string) *Node {
+	return ns.cMap.GetByNodeID(nodeID)
+}
+
+/*
+PickN
+
+返回n个节点，包含key所属的节点以及后续的n-1个节点
+*/
 func (ns *NodeServiceRO) PickN(key []byte, n int) []*Node {
 	return ns.cMap.GetN(key, n)
 }

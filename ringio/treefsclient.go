@@ -19,8 +19,8 @@ type rpcTreeClient struct {
 
 func newRPCHashClient(pool *chunkpool.ChunkPool) *rpcHashClient {
 	return &rpcHashClient{
-		defaultBufferSize: DefaultBufferSize,
-		pool:              pool,
+		BufferSize: DefaultBufferSize,
+		pool:       pool,
 	}
 }
 

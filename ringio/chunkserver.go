@@ -27,11 +27,13 @@ func (r *rpcServer) Get(key *fspb.Key, stream fspb.HashChunkSystemService_GetSer
 	fi := chunk.Info()
 	if err = stream.Send(&fspb.GetResponse{
 		ChunkInfo: &fspb.HashChunkInfo{
-			ChunkName: fi.Name(),
-			ChunkHash: fi.Hash(),
-			BasePath:  fi.Path(),
-			Size:      fi.Size(),
-			ModTime:   timestamppb.New(fi.ModTime()),
+			ChunkCount: fi.Count(),
+			ChunkName:  fi.Name(),
+			ChunkHash:  fi.Hash(),
+			BasePath:   fi.Path(),
+			Size:       fi.Size(),
+			ModTime:    timestamppb.New(fi.ModTime()),
+			CreateTime: timestamppb.New(fi.CreateTime()),
 		},
 	}); err != nil {
 		return err
@@ -125,7 +127,7 @@ func (r *rpcServer) Put(stream fspb.HashChunkSystemService_PutServer) error {
 
 func (r *rpcServer) Delete(ctx context.Context, key *fspb.Key) (*fspb.Error, error) {
 	if err := r.hcs.local().Delete(key.Key); err != nil {
-		return &fspb.Error{Err: err.Error()}, err
+		return &fspb.Error{Err: err.Error()}, nil
 	}
 	return &fspb.Error{}, nil
 }

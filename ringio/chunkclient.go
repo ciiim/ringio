@@ -22,12 +22,22 @@ const (
 )
 
 type rpcHashClient struct {
-	defaultBufferSize int64
-	pool              *chunkpool.ChunkPool
+	BufferSize int64
+	pool       *chunkpool.ChunkPool
 }
 
 func ctxWithTimeout() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), _RPC_TIMEOUT)
+}
+
+func (c *rpcHashClient) dialClient(ctx context.Context, ni *node.Node) (fspb.HashChunkSystemServiceClient, func(), error) {
+	conn, err := grpc.DialContext(ctx, ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, err
+	}
+	return fspb.NewHashChunkSystemServiceClient(conn), func() {
+		conn.Close()
+	}, nil
 }
 
 type tempFileReadCloser struct {
@@ -50,12 +60,11 @@ func warpTempFileReadCloser(file *os.File) io.ReadCloser {
 
 func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chunk *DHashChunk, err error) {
 	dlogger.Dlog.LogDebugf("[RPC Client]", "Get from %s", ni.Addr())
-	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client, close, err := c.dialClient(ctx, ni)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	client := fspb.NewHashChunkSystemServiceClient(conn)
+	defer close()
 	stream, err := client.Get(ctx, &fspb.Key{Key: key})
 	if err != nil {
 		return nil, err
@@ -67,17 +76,10 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 	if err != nil {
 		return nil, err
 	}
-	chunk.HashChunk.SetInfo(&hashchunk.HashChunkInfo{
-		ChunkCount:   hashchunk.RemoteChunkCount,
-		ChunkName:    resp.ChunkInfo.ChunkName,
-		ChunkHash:    resp.ChunkInfo.ChunkHash,
-		ChunkPath:    resp.ChunkInfo.BasePath,
-		ChunkSize:    resp.ChunkInfo.Size,
-		ChunkModTime: resp.ChunkInfo.ModTime.AsTime(),
-	})
+	chunk.HashChunk.SetInfo(PBChunkInfoToHashChunkInfo(resp.ChunkInfo))
 
 	// 如果chunk大小超过默认buffer大小，写入临时文件中
-	if resp.ChunkInfo.Size > c.defaultBufferSize {
+	if resp.ChunkInfo.Size > c.BufferSize {
 		chunkTempFile, err := os.CreateTemp(os.TempDir(), "remote-chunk-")
 		if err != nil {
 			return nil, err
@@ -151,13 +153,11 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 
 func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chunkName string, reader io.Reader) error {
 	dlogger.Dlog.LogDebugf("[RPC Client]", "Put to %s", ni.Addr())
-	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client, close, err := c.dialClient(ctx, ni)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-
-	client := fspb.NewHashChunkSystemServiceClient(conn)
+	defer close()
 
 	stream, err := client.Put(ctx)
 	if err != nil {
@@ -174,7 +174,7 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chun
 		return err
 	}
 
-	buffer := make([]byte, 4096)
+	buffer := make([]byte, c.BufferSize)
 	var buffered int64 = 0
 	for {
 		n, err := reader.Read(buffer[buffered:])
@@ -185,7 +185,7 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chun
 			return err
 		}
 		buffered += int64(n)
-		if buffered < c.defaultBufferSize {
+		if buffered < c.BufferSize {
 			continue
 		}
 		content.Data = buffer[:buffered]
@@ -217,13 +217,12 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chun
 
 func (c *rpcHashClient) delete(ctx context.Context, ni *node.Node, key []byte) error {
 	dlogger.Dlog.LogDebugf("[RPC Client]", "Delete file in %s", ni.Addr())
-	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client, close, err := c.dialClient(ctx, ni)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer close()
 
-	client := fspb.NewHashChunkSystemServiceClient(conn)
 	_, err = client.Delete(ctx, &fspb.Key{Key: key})
 	if err != nil {
 		return err
