@@ -21,9 +21,9 @@ type IDHashChunkSystem interface {
 
 	Delete(key []byte) error
 
-	StoreReader(key []byte, name string, reader io.Reader) error
+	StoreReader(key []byte, name string, reader io.Reader, extra *hashchunk.ExtraInfo) error
 
-	StoreBytes(key []byte, name string, v []byte) error
+	StoreBytes(key []byte, name string, v []byte, extra *hashchunk.ExtraInfo) error
 
 	// 修复chunk，从其它节点获取chunk
 	HealChunk(chunkKey []byte) (IDHashChunk, error)

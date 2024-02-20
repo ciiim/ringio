@@ -8,6 +8,16 @@ const (
 	RemoteChunkCount = -1
 )
 
+type Info struct {
+	ChunkInfo *HashChunkInfo `json:"chunk_info"`
+	ExtraInfo *ExtraInfo     `json:"extra_info"`
+}
+
+type ExtraInfo struct {
+	Tag   string `json:"tag"`
+	Extra any    `json:"extra"`
+}
+
 type HashChunkInfo struct {
 
 	// 块的引用计数
@@ -19,6 +29,20 @@ type HashChunkInfo struct {
 	ChunkSize       int64     `json:"size"`
 	ChunkModTime    time.Time `json:"mod_time"`
 	ChunkCreateTime time.Time `json:"create_time"`
+}
+
+func NewInfo(chunkInfo *HashChunkInfo, extraInfo *ExtraInfo) *Info {
+	return &Info{
+		ChunkInfo: chunkInfo,
+		ExtraInfo: extraInfo,
+	}
+}
+
+func NewExtraInfo(tag string, extra any) *ExtraInfo {
+	return &ExtraInfo{
+		Tag:   tag,
+		Extra: extra,
+	}
 }
 
 func NewChunkInfo(chunkName string, hashSum []byte, size int64) *HashChunkInfo {

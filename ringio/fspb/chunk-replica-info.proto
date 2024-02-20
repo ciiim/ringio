@@ -24,16 +24,11 @@ message ReplicaChunkInfo {
 
     HashChunkInfo chunk_info = 1;
 
-    bool master = 2;
+    int64 replica_count = 2;
 
-    int64 replica_count = 3;
+    bytes checksum = 3;
 
-    bytes checksum = 4;
-
-    repeated string node_ids = 5;
-
-    //custom map[string]string
-    map<string, string> custom = 6;
+    repeated string node_ids = 4;
 
 }
 
@@ -55,7 +50,7 @@ message CheckReplicaRequest {
 }
 
 
-message SyncReplicaInfoRequest {
+message UpdateReplicaInfoRequest {
     ReplicaChunkInfo info = 1;
 }
 

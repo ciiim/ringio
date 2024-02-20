@@ -24,7 +24,7 @@ func (r *rpcServer) Get(key *fspb.Key, stream fspb.HashChunkSystemService_GetSer
 		})
 		return nil
 	}
-	fi := chunk.Info()
+	fi := chunk.Info().ChunkInfo
 	if err = stream.Send(&fspb.GetResponse{
 		ChunkInfo: &fspb.HashChunkInfo{
 			ChunkCount: fi.Count(),
@@ -91,8 +91,8 @@ func (r *rpcServer) Put(stream fspb.HashChunkSystemService_PutServer) error {
 	if err := stream.RecvMsg(request); err != nil {
 		return nil
 	}
-	//新建一个chunk
-	w, err := r.hcs.local().CreateChunk(request.Key.GetKey(), request.GetChunkName())
+	//新建一个chunk，还没生成副本，所以不需要replicaInfo
+	w, err := r.hcs.local().CreateChunk(request.Key.GetKey(), request.GetChunkName(), nil)
 	if err != nil {
 		stream.SendAndClose(&fspb.Error{Operation: "New Chunk", Err: err.Error()})
 		return nil

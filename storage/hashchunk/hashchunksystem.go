@@ -104,7 +104,7 @@ func NewHashChunkSystem(rootPath string, capacity int64, chunkSize int64, hashFn
 	return hcs
 }
 
-func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string) (io.WriteCloser, error) {
+func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, extra *ExtraInfo) (io.WriteCloser, error) {
 	if len(key) == 0 {
 		return nil, ErrEmptyKey
 	}
@@ -121,16 +121,17 @@ func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string) (io.WriteC
 
 	hci := NewChunkInfo(chunkName, key, 0)
 	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
+	info := NewInfo(hci, extra)
 	if err := os.MkdirAll(hci.ChunkPath, os.ModePerm); err != nil {
 		return nil, err
 	}
-	if err := hcs.storeChunkInfo(key, hci); err != nil {
+	if err := hcs.storeInfo(key, info); err != nil {
 		return nil, err
 	}
 	return hcs.createChunkWriter(hci)
 }
 
-func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byte) error {
+func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byte, extra *ExtraInfo) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
@@ -159,14 +160,12 @@ func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byt
 	hci := NewChunkInfo(chunkName, key, valueLength)
 	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
 
-	// hci.Path = rootPath/<path>
-	hci.ChunkPath = filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci))
-
+	info := NewInfo(hci, extra)
 	//make dir
 	if err := os.MkdirAll(hci.ChunkPath, os.ModePerm); err != nil {
 		return err
 	}
-	if err := hcs.storeChunkInfo(key, hci); err != nil {
+	if err := hcs.storeInfo(key, info); err != nil {
 		return err
 	}
 	if err := hcs.storeChunkBytes(hci, value); err != nil {
@@ -179,7 +178,7 @@ func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byt
 	return nil
 }
 
-func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reader) error {
+func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reader, extra *ExtraInfo) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
@@ -202,10 +201,11 @@ func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reade
 	//check capacity
 	hci := NewChunkInfo(chunkName, key, 0)
 	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
+	info := NewInfo(hci, extra)
 	if err := os.MkdirAll(hci.ChunkPath, os.ModePerm); err != nil {
 		return err
 	}
-	if err := hcs.storeChunkInfo(key, hci); err != nil {
+	if err := hcs.storeInfo(key, info); err != nil {
 		return err
 	}
 	if err := hcs.storeChunkReader(hci, v); err != nil {
@@ -222,14 +222,14 @@ func (hcs *HashChunkSystem) Get(key []byte) (*HashChunk, error) {
 	if len(key) == 0 {
 		return nil, ErrEmptyKey
 	}
-	hci, err := hcs.getChunkInfo(key)
+	info, err := hcs.getInfo(key)
 	if err != nil {
 		return nil, err
 	}
-	file, err := hcs.getChunk(hci)
+	file, err := hcs.getChunk(info)
 	return &HashChunk{
 		ReadCloser: file,
-		info:       hci,
+		info:       info,
 	}, err
 }
 
@@ -250,21 +250,21 @@ func (hcs *HashChunkSystem) Delete(key []byte) error {
 		return err
 	}
 
-	hci, err := hcs.getChunkInfo(key)
+	info, err := hcs.getInfo(key)
 	if err != nil {
 		return err
 	}
-	if hcs.occupied.Load()-hci.ChunkSize < 0 {
+	if hcs.occupied.Load()-info.ChunkInfo.ChunkSize < 0 {
 		return fmt.Errorf("[Delete Chunk Error] Occupied is 0")
 	}
 	if err := hcs.deleteChunkStat(key); err != nil {
 		return err
 	}
-	if err := hcs.deleteChunk(hci); err != nil {
+	if err := hcs.deleteChunk(info); err != nil {
 		return err
 	}
 	//update Occupied
-	hcs.updateOccupied(hcs.occupied.Load() - hci.ChunkSize)
+	hcs.updateOccupied(hcs.occupied.Load() - info.ChunkInfo.ChunkSize)
 	return nil
 }
 
@@ -273,7 +273,7 @@ func (hcs *HashChunkSystem) Opt(opt any) any {
 }
 
 func (hcs *HashChunkSystem) isExist(key []byte) bool {
-	_, err := hcs.getChunkInfo(key)
+	_, err := hcs.getInfo(key)
 	return err == nil
 }
 
@@ -337,37 +337,37 @@ func (hcs *HashChunkSystem) storeChunkReader(key *HashChunkInfo, reader io.Reade
 	return err
 }
 
-func (hcs *HashChunkSystem) getChunk(hcStat *HashChunkInfo) (io.ReadCloser, error) {
-	path := hcStat.ChunkPath
+func (hcs *HashChunkSystem) getChunk(info *Info) (io.ReadCloser, error) {
+	path := info.ChunkInfo.ChunkPath
 	if path == "" {
 		return nil, errors.New("path is empty")
 	}
 
-	file, err := os.Open(filepath.Join(path, hcStat.ChunkName))
+	file, err := os.Open(filepath.Join(path, info.ChunkInfo.ChunkName))
 	if err != nil {
 		return nil, err
 	}
 	return file, nil
 }
 
-func (hcs *HashChunkSystem) deleteChunk(hci *HashChunkInfo) error {
-	fullPath := filepath.Join(hci.ChunkPath, hci.ChunkName)
+func (hcs *HashChunkSystem) deleteChunk(info *Info) error {
+	fullPath := filepath.Join(info.ChunkInfo.ChunkPath, info.ChunkInfo.ChunkName)
 	err := os.Remove(fullPath)
 	return err
 }
 
-func (hcs *HashChunkSystem) getChunkInfo(hashSum []byte) (*HashChunkInfo, error) {
+func (hcs *HashChunkSystem) getInfo(hashSum []byte) (*Info, error) {
 	infoBytes, err := hcs.levelDB.Get(hashSum, nil)
 	if err != nil {
 		return nil, err
 	}
-	var info HashChunkInfo
+	var info Info
 	err = json.Unmarshal(infoBytes, &info)
 	return &info, err
 }
 
-func (hcs *HashChunkSystem) storeChunkInfo(hashSum []byte, hci *HashChunkInfo) error {
-	res, err := json.Marshal(hci)
+func (hcs *HashChunkSystem) storeInfo(hashSum []byte, info *Info) error {
+	res, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
@@ -381,29 +381,29 @@ func (hcs *HashChunkSystem) deleteChunkStat(hashSum []byte) error {
 
 func (hcs *HashChunkSystem) increaseChunkCounter(key []byte) (nowCounter int64, err error) {
 	// get chunk info
-	hci, err := hcs.getChunkInfo(key)
+	info, err := hcs.getInfo(key)
 	if err != nil {
 		return 0, err
 	}
-	hci.ChunkCount++
+	info.ChunkInfo.ChunkCount++
 
 	// store chunk info
-	return hci.ChunkCount, hcs.storeChunkInfo(key, hci)
+	return info.ChunkInfo.ChunkCount, hcs.storeInfo(key, info)
 }
 
 func (hcs *HashChunkSystem) decreaseChunkCounter(key []byte) (nowCounter int64, err error) {
 	// get chunk info
-	hci, err := hcs.getChunkInfo(key)
+	info, err := hcs.getInfo(key)
 	if err != nil {
 		return 0, err
 	}
-	hci.ChunkCount--
-	if hci.ChunkCount <= 0 {
+	info.ChunkInfo.ChunkCount--
+	if info.ChunkInfo.ChunkCount <= 0 {
 		return 0, nil
 	}
 
 	// store chunk info
-	return hci.ChunkCount, hcs.storeChunkInfo(key, hci)
+	return info.ChunkInfo.ChunkCount, hcs.storeInfo(key, info)
 
 }
 

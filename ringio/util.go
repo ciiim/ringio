@@ -65,29 +65,29 @@ func WithPort(addr string, port string) string {
 	return addr + ":" + port
 }
 
-func ReplicaInfoToPBReplicaInfo(chunkInfo *hashchunk.HashChunkInfo, info *replica.ReplicaObjectInfo) *fspb.ReplicaChunkInfo {
+func ReplicaInfoToPBReplicaInfo(info *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo]) *fspb.ReplicaChunkInfo {
 	if info == nil {
 		return nil
 	}
-	return &fspb.ReplicaChunkInfo{
-		ChunkInfo:    HashChunkInfoToPBChunkInfo(chunkInfo),
-		Master:       info.Master,
-		ReplicaCount: int64(info.ReplicaCount),
+	rci := &fspb.ReplicaChunkInfo{
+		ChunkInfo:    HashChunkInfoToPBChunkInfo(info.Custom),
+		ReplicaCount: int64(info.ExpectedReplicaCount),
 		Checksum:     info.Checksum,
 		NodeIds:      info.All,
-		Custom:       info.Custom,
 	}
+	return rci
 }
 
-func PBReplicaInfoToReplicaInfo(pb *fspb.ReplicaChunkInfo) (*hashchunk.HashChunkInfo, *replica.ReplicaObjectInfo) {
+func PBReplicaInfoToReplicaInfo(pb *fspb.ReplicaChunkInfo) *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo] {
 	if pb == nil {
-		return nil, nil
+		return nil
 	}
-	return PBChunkInfoToHashChunkInfo(pb.ChunkInfo), &replica.ReplicaObjectInfo{
-		Master:       pb.Master,
-		ReplicaCount: int(pb.ReplicaCount),
-		Checksum:     pb.Checksum,
-		All:          pb.NodeIds,
-		Custom:       pb.Custom,
+	chunkInfo := PBChunkInfoToHashChunkInfo(pb.ChunkInfo)
+	return &replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo]{
+		Key:                  pb.ChunkInfo.ChunkHash,
+		ExpectedReplicaCount: int(pb.ReplicaCount),
+		Checksum:             pb.Checksum,
+		All:                  pb.NodeIds,
+		Custom:               chunkInfo,
 	}
 }

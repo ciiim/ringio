@@ -33,7 +33,7 @@ service HashChunkSystemService {
     rpc GetReplica(Key) returns (stream GetReplicaResponse) {}
     rpc DeleteReplica(Key) returns (Error) {}
     rpc CheckReplica(CheckReplicaRequest) returns (Error) {}
-    rpc SyncReplicaInfo(ReplicaChunkInfo) returns (Error) {}
+    rpc UpdateReplicaInfo(ReplicaChunkInfo) returns (Error) {}
 }
 
 

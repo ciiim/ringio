@@ -40,22 +40,18 @@ func (c *rpcHashClient) dialClient(ctx context.Context, ni *node.Node) (fspb.Has
 	}, nil
 }
 
-type tempFileReadCloser struct {
+type tempFileReadSeekCloser struct {
 	*os.File
 }
 
-func (t *tempFileReadCloser) Read(p []byte) (n int, err error) {
-	return t.File.Read(p)
-}
-
-func (t *tempFileReadCloser) Close() error {
+func (t *tempFileReadSeekCloser) Close() error {
 	err := t.File.Close()
 	os.Remove(t.File.Name())
 	return err
 }
 
-func warpTempFileReadCloser(file *os.File) io.ReadCloser {
-	return &tempFileReadCloser{file}
+func warpTempFileReadSeekCloser(file *os.File) io.ReadSeekCloser {
+	return &tempFileReadSeekCloser{file}
 }
 
 func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chunk *DHashChunk, err error) {
@@ -76,7 +72,7 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 	if err != nil {
 		return nil, err
 	}
-	chunk.HashChunk.SetInfo(PBChunkInfoToHashChunkInfo(resp.ChunkInfo))
+	chunk.HashChunk.SetInfo(hashchunk.NewInfo(PBChunkInfoToHashChunkInfo(resp.ChunkInfo), nil))
 
 	// 如果chunk大小超过默认buffer大小，写入临时文件中
 	if resp.ChunkInfo.Size > c.BufferSize {
@@ -118,7 +114,7 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 			return nil, err
 		}
 
-		chunk.ReadCloser = warpTempFileReadCloser(chunkTempFile)
+		chunk.ReadCloser = warpTempFileReadSeekCloser(chunkTempFile)
 
 		return chunk, nil
 

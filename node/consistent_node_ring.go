@@ -4,6 +4,7 @@ import (
 	"github.com/ciiim/cloudborad/node/chash"
 )
 
+// 并发安全
 type CMap struct {
 	*chash.ConsistentHash
 }

@@ -7,14 +7,14 @@ import (
 
 type HashChunk struct {
 	io.ReadCloser
-	info *HashChunkInfo
+	info *Info
 }
 
-func (c *HashChunk) Info() IHashChunkInfo {
+func (c *HashChunk) Info() *Info {
 	return c.info
 }
 
-func (c *HashChunk) SetInfo(info *HashChunkInfo) {
+func (c *HashChunk) SetInfo(info *Info) {
 	c.info = info
 }
 

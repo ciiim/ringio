@@ -19,14 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	HashChunkSystemService_Get_FullMethodName             = "/fspb.HashChunkSystemService/Get"
-	HashChunkSystemService_Put_FullMethodName             = "/fspb.HashChunkSystemService/Put"
-	HashChunkSystemService_Delete_FullMethodName          = "/fspb.HashChunkSystemService/Delete"
-	HashChunkSystemService_PutReplica_FullMethodName      = "/fspb.HashChunkSystemService/PutReplica"
-	HashChunkSystemService_GetReplica_FullMethodName      = "/fspb.HashChunkSystemService/GetReplica"
-	HashChunkSystemService_DeleteReplica_FullMethodName   = "/fspb.HashChunkSystemService/DeleteReplica"
-	HashChunkSystemService_CheckReplica_FullMethodName    = "/fspb.HashChunkSystemService/CheckReplica"
-	HashChunkSystemService_SyncReplicaInfo_FullMethodName = "/fspb.HashChunkSystemService/SyncReplicaInfo"
+	HashChunkSystemService_Get_FullMethodName               = "/fspb.HashChunkSystemService/Get"
+	HashChunkSystemService_Put_FullMethodName               = "/fspb.HashChunkSystemService/Put"
+	HashChunkSystemService_Delete_FullMethodName            = "/fspb.HashChunkSystemService/Delete"
+	HashChunkSystemService_PutReplica_FullMethodName        = "/fspb.HashChunkSystemService/PutReplica"
+	HashChunkSystemService_GetReplica_FullMethodName        = "/fspb.HashChunkSystemService/GetReplica"
+	HashChunkSystemService_DeleteReplica_FullMethodName     = "/fspb.HashChunkSystemService/DeleteReplica"
+	HashChunkSystemService_CheckReplica_FullMethodName      = "/fspb.HashChunkSystemService/CheckReplica"
+	HashChunkSystemService_UpdateReplicaInfo_FullMethodName = "/fspb.HashChunkSystemService/UpdateReplicaInfo"
 )
 
 // HashChunkSystemServiceClient is the client API for HashChunkSystemService service.
@@ -40,7 +40,7 @@ type HashChunkSystemServiceClient interface {
 	GetReplica(ctx context.Context, in *Key, opts ...grpc.CallOption) (HashChunkSystemService_GetReplicaClient, error)
 	DeleteReplica(ctx context.Context, in *Key, opts ...grpc.CallOption) (*Error, error)
 	CheckReplica(ctx context.Context, in *CheckReplicaRequest, opts ...grpc.CallOption) (*Error, error)
-	SyncReplicaInfo(ctx context.Context, in *ReplicaChunkInfo, opts ...grpc.CallOption) (*Error, error)
+	UpdateReplicaInfo(ctx context.Context, in *ReplicaChunkInfo, opts ...grpc.CallOption) (*Error, error)
 }
 
 type hashChunkSystemServiceClient struct {
@@ -210,9 +210,9 @@ func (c *hashChunkSystemServiceClient) CheckReplica(ctx context.Context, in *Che
 	return out, nil
 }
 
-func (c *hashChunkSystemServiceClient) SyncReplicaInfo(ctx context.Context, in *ReplicaChunkInfo, opts ...grpc.CallOption) (*Error, error) {
+func (c *hashChunkSystemServiceClient) UpdateReplicaInfo(ctx context.Context, in *ReplicaChunkInfo, opts ...grpc.CallOption) (*Error, error) {
 	out := new(Error)
-	err := c.cc.Invoke(ctx, HashChunkSystemService_SyncReplicaInfo_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, HashChunkSystemService_UpdateReplicaInfo_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ type HashChunkSystemServiceServer interface {
 	GetReplica(*Key, HashChunkSystemService_GetReplicaServer) error
 	DeleteReplica(context.Context, *Key) (*Error, error)
 	CheckReplica(context.Context, *CheckReplicaRequest) (*Error, error)
-	SyncReplicaInfo(context.Context, *ReplicaChunkInfo) (*Error, error)
+	UpdateReplicaInfo(context.Context, *ReplicaChunkInfo) (*Error, error)
 	mustEmbedUnimplementedHashChunkSystemServiceServer()
 }
 
@@ -259,8 +259,8 @@ func (UnimplementedHashChunkSystemServiceServer) DeleteReplica(context.Context, 
 func (UnimplementedHashChunkSystemServiceServer) CheckReplica(context.Context, *CheckReplicaRequest) (*Error, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckReplica not implemented")
 }
-func (UnimplementedHashChunkSystemServiceServer) SyncReplicaInfo(context.Context, *ReplicaChunkInfo) (*Error, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SyncReplicaInfo not implemented")
+func (UnimplementedHashChunkSystemServiceServer) UpdateReplicaInfo(context.Context, *ReplicaChunkInfo) (*Error, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateReplicaInfo not implemented")
 }
 func (UnimplementedHashChunkSystemServiceServer) mustEmbedUnimplementedHashChunkSystemServiceServer() {
 }
@@ -424,20 +424,20 @@ func _HashChunkSystemService_CheckReplica_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HashChunkSystemService_SyncReplicaInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HashChunkSystemService_UpdateReplicaInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReplicaChunkInfo)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HashChunkSystemServiceServer).SyncReplicaInfo(ctx, in)
+		return srv.(HashChunkSystemServiceServer).UpdateReplicaInfo(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HashChunkSystemService_SyncReplicaInfo_FullMethodName,
+		FullMethod: HashChunkSystemService_UpdateReplicaInfo_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HashChunkSystemServiceServer).SyncReplicaInfo(ctx, req.(*ReplicaChunkInfo))
+		return srv.(HashChunkSystemServiceServer).UpdateReplicaInfo(ctx, req.(*ReplicaChunkInfo))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -462,8 +462,8 @@ var HashChunkSystemService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HashChunkSystemService_CheckReplica_Handler,
 		},
 		{
-			MethodName: "SyncReplicaInfo",
-			Handler:    _HashChunkSystemService_SyncReplicaInfo_Handler,
+			MethodName: "UpdateReplicaInfo",
+			Handler:    _HashChunkSystemService_UpdateReplicaInfo_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

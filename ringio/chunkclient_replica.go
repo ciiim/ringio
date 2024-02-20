@@ -15,7 +15,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func (r *rpcHashClient) putReplica(ctx context.Context, node *node.Node, reader io.Reader, chunkInfo *hashchunk.HashChunkInfo, info *replica.ReplicaObjectInfo) error {
+func (r *rpcHashClient) putReplica(
+	ctx context.Context,
+	node *node.Node,
+	reader io.Reader,
+	chunkInfo *hashchunk.HashChunkInfo,
+	info *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo],
+) error {
 	conn, err := grpc.DialContext(ctx, node.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -30,7 +36,7 @@ func (r *rpcHashClient) putReplica(ctx context.Context, node *node.Node, reader 
 
 	content := new(fspb.PutReplicaRequest)
 
-	content.Info = ReplicaInfoToPBReplicaInfo(chunkInfo, info)
+	content.Info = ReplicaInfoToPBReplicaInfo(info)
 
 	if err = stream.Send(content); err != nil {
 		return err
@@ -79,30 +85,30 @@ func (r *rpcHashClient) putReplica(ctx context.Context, node *node.Node, reader 
 	return nil
 }
 
-func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fspb.Key) (io.ReadCloser, *hashchunk.HashChunkInfo, *replica.ReplicaObjectInfo, error) {
+func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fspb.Key) (io.ReadSeekCloser, *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo], error) {
 	client, close, err := r.dialClient(ctx, node)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	defer close()
 
 	stream, err := client.GetReplica(ctx, key)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	resp, err := stream.Recv()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
-	chunkInfo, replicaInfo := PBReplicaInfoToReplicaInfo(resp.Info)
-
+	replicaInfo := PBReplicaInfoToReplicaInfo(resp.Info)
+	chunkInfo := replicaInfo.Custom
 	// 如果chunk大小超过默认buffer大小，写入临时文件中
 	if chunkInfo.Size() > r.BufferSize {
 		chunkTempFile, err := os.CreateTemp(os.TempDir(), "remote-chunk-replica-")
 		if err != nil {
-			return nil, chunkInfo, replicaInfo, err
+			return nil, replicaInfo, err
 		}
 		//不要defer关闭，接受完数据就seek到文件头，然后返回
 		defer func() {
@@ -122,7 +128,7 @@ func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fs
 				break
 			}
 			if err != nil {
-				return nil, chunkInfo, replicaInfo, err
+				return nil, replicaInfo, err
 			}
 
 			n := len(resp.Data)
@@ -131,16 +137,16 @@ func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fs
 			}
 			_, err = chunkTempFile.Write(resp.GetData())
 			if err != nil {
-				return nil, chunkInfo, replicaInfo, err
+				return nil, replicaInfo, err
 			}
 		}
 		if _, err = chunkTempFile.Seek(0, io.SeekStart); err != nil {
-			return nil, chunkInfo, replicaInfo, err
+			return nil, replicaInfo, err
 		}
 
-		rc := warpTempFileReadCloser(chunkTempFile)
+		rc := warpTempFileReadSeekCloser(chunkTempFile)
 
-		return rc, chunkInfo, replicaInfo, nil
+		return rc, replicaInfo, nil
 
 	} //if end
 
@@ -152,7 +158,7 @@ func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fs
 			break
 		}
 		if err != nil {
-			return nil, chunkInfo, replicaInfo, err
+			return nil, replicaInfo, err
 		}
 
 		n := len(resp.Data)
@@ -164,11 +170,11 @@ func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fs
 			break
 		}
 		if err != nil {
-			return nil, chunkInfo, replicaInfo, err
+			return nil, replicaInfo, err
 		}
 	}
 	rc := chunkBuffer.ReadCloser(r.pool)
-	return rc, chunkInfo, replicaInfo, nil
+	return rc, replicaInfo, nil
 }
 
 func (r *rpcHashClient) delReplica(ctx context.Context, node *node.Node, key *fspb.Key) error {
@@ -190,7 +196,7 @@ func (r *rpcHashClient) delReplica(ctx context.Context, node *node.Node, key *fs
 	return nil
 }
 
-func (r *rpcHashClient) checkReplica(ctx context.Context, node *node.Node, chunkInfo *hashchunk.HashChunkInfo, info *replica.ReplicaObjectInfo) error {
+func (r *rpcHashClient) checkReplica(ctx context.Context, node *node.Node, info *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo]) error {
 	client, close, err := r.dialClient(ctx, node)
 	if err != nil {
 		return err
@@ -198,7 +204,7 @@ func (r *rpcHashClient) checkReplica(ctx context.Context, node *node.Node, chunk
 	defer close()
 
 	checkRequest := &fspb.CheckReplicaRequest{
-		Info: ReplicaInfoToPBReplicaInfo(chunkInfo, info),
+		Info: ReplicaInfoToPBReplicaInfo(info),
 	}
 
 	resp, err := client.CheckReplica(ctx, checkRequest)
@@ -213,14 +219,14 @@ func (r *rpcHashClient) checkReplica(ctx context.Context, node *node.Node, chunk
 	return nil
 }
 
-func (r *rpcHashClient) syncReplicaInfo(ctx context.Context, node *node.Node, chunkInfo *hashchunk.HashChunkInfo, info *replica.ReplicaObjectInfo) error {
+func (r *rpcHashClient) updateReplicaInfo(ctx context.Context, node *node.Node, info *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo]) error {
 	client, close, err := r.dialClient(ctx, node)
 	if err != nil {
 		return err
 	}
 	defer close()
 
-	resp, err := client.SyncReplicaInfo(ctx, ReplicaInfoToPBReplicaInfo(chunkInfo, info))
+	resp, err := client.UpdateReplicaInfo(ctx, ReplicaInfoToPBReplicaInfo(info))
 	if err != nil {
 		return err
 	}

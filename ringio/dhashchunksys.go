@@ -11,6 +11,7 @@ import (
 	"github.com/ciiim/cloudborad/chunkpool"
 	dlogger "github.com/ciiim/cloudborad/debug"
 	"github.com/ciiim/cloudborad/node"
+	"github.com/ciiim/cloudborad/replica"
 	"github.com/ciiim/cloudborad/storage/hashchunk"
 )
 
@@ -19,6 +20,10 @@ type DHashChunkSystem struct {
 	localSys *hashchunk.HashChunkSystem
 
 	pool *chunkpool.ChunkPool
+
+	replicaService *replica.ReplicaServiceG[*hashchunk.HashChunkInfo]
+
+	recoveringChunk map[string]struct{}
 
 	remote *rpcHashClient
 	ns     *node.NodeServiceRO
@@ -40,10 +45,14 @@ func NewDHCS(rootPath string, capacity int64, chunkSize int64, ns *node.NodeServ
 
 		pool: chunkpool.NewChunkPool(chunkSize),
 
+		replicaService: replica.NewG[*hashchunk.HashChunkInfo](3, ns),
+
 		ns: ns,
 	}
 
 	d.remote = newRPCHashClient(d.pool)
+
+	d.setReplicaFunctions()
 	return d
 }
 
@@ -71,7 +80,7 @@ func (d *DHashChunkSystem) Get(key []byte) (IDHashChunk, error) {
 	return resp, err
 }
 
-func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, v []byte) error {
+func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, v []byte, extra *hashchunk.ExtraInfo) error {
 	dlogger.Dlog.LogDebugf("[HashDFileSystem]", "Store by key '%s', name '%s'", key, filename)
 	ni := d.PickNode(key)
 	if ni == nil {
@@ -79,7 +88,7 @@ func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, v []byte) err
 	}
 	// store locally
 	if ni.Equal(d.ns.Self()) {
-		return d.local().StoreBytes(key, filename, v)
+		return d.local().StoreBytes(key, filename, v, extra)
 	}
 
 	reader := bytes.NewReader(v)
@@ -90,7 +99,7 @@ func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, v []byte) err
 	return d.remote.put(ctx, ni, key, filename, reader)
 }
 
-func (d *DHashChunkSystem) StoreReader(key []byte, filename string, reader io.Reader) error {
+func (d *DHashChunkSystem) StoreReader(key []byte, filename string, reader io.Reader, extra *hashchunk.ExtraInfo) error {
 	dlogger.Dlog.LogDebugf("[HashDFileSystem]", "Store by key '%s', name '%s'", key, filename)
 	ni := d.PickNode(key)
 	if ni == nil {
@@ -98,7 +107,7 @@ func (d *DHashChunkSystem) StoreReader(key []byte, filename string, reader io.Re
 	}
 	// store locally
 	if ni.Equal(d.ns.Self()) {
-		return d.storeLocally(key, filename, reader)
+		return d.storeLocally(key, filename, reader, extra)
 	}
 
 	// store remotely
@@ -137,8 +146,8 @@ func (d *DHashChunkSystem) getLocally(key []byte) (*DHashChunk, error) {
 		err
 }
 
-func (d *DHashChunkSystem) storeLocally(key []byte, filename string, reader io.Reader) error {
-	return d.local().StoreReader(key, filename, reader)
+func (d *DHashChunkSystem) storeLocally(key []byte, filename string, reader io.Reader, extra *hashchunk.ExtraInfo) error {
+	return d.local().StoreReader(key, filename, reader, extra)
 }
 
 func (d *DHashChunkSystem) deleteLocally(key []byte) error {
@@ -151,8 +160,27 @@ func (d *DHashChunkSystem) Node() *node.Node {
 
 func (d *DHashChunkSystem) HealChunk(key []byte) (IDHashChunk, error) {
 
-	//TODO: get from other nodes
-	return nil, nil
+	reader, replicaInfo, err := d.replicaService.RecoverReplica(key)
+	if err != nil {
+		return nil, err
+	}
+
+	hashChunk := new(hashchunk.HashChunk)
+
+	hashChunk.ReadCloser = reader
+
+	chunkInfo := replicaInfo.Custom
+
+	// 把chunkInfo单独拿出来，后续replicaInfo存盘的时候就不会把chunkinfo再存一次
+	replicaInfo.Custom = nil
+
+	info := hashchunk.NewInfo(chunkInfo, hashchunk.NewExtraInfo("replica", replicaInfo))
+
+	hashChunk.SetInfo(info)
+
+	return &DHashChunk{
+		HashChunk: hashChunk,
+	}, nil
 }
 
 func (d *DHashChunkSystem) Config() *hashchunk.Config {
