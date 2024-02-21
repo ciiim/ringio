@@ -12,7 +12,10 @@ func Router() *gin.Engine {
 }
 
 func initRouter(g *gin.Engine) {
-	g.GET("/filecontent/:space/:filehash", service.GetFileContent)
+
+	g.GET("/test/*path", service.Test)
+
+	g.GET("/filecontent/:space/*path", service.GetFileContent)
 
 	g.POST("/space/:space", service.GetSpaceWithDir)
 

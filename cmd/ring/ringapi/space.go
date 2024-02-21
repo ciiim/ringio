@@ -2,6 +2,7 @@ package ringapi
 
 import (
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math"
 	"mime/multipart"
@@ -101,7 +102,7 @@ func (r *RingAPI) putFile(space, base, name string, fileHash []byte, fileSize in
 	}
 
 	//存储文件
-	return r.ring.StorageSystem.StoreReader(fileHash, hex.EncodeToString(fileHash), file)
+	return r.ring.StorageSystem.StoreReader(fileHash, hex.EncodeToString(fileHash), file, nil)
 }
 
 // 分片存储文件
@@ -159,6 +160,7 @@ func (r *RingAPI) putFileSplit(space, base, name string, chunkSize int64, fileHa
 			chunks[i].Hash,
 			hex.EncodeToString(chunks[i].Hash),
 			chunkReader,
+			nil,
 		); err != nil {
 			return err
 		}
@@ -166,4 +168,56 @@ func (r *RingAPI) putFileSplit(space, base, name string, chunkSize int64, fileHa
 
 	return nil
 
+}
+
+type fileReader struct {
+	io.ReadCloser
+	FileSize int64
+	FileName string
+}
+
+// 下载文件
+func (r *RingAPI) GetFile(space, base, name string) (*fileReader, error) {
+	base = handleBaseDir(base)
+	metadataBytes, err := r.ring.FrontSystem.GetMetadata(space, base, name+".meta")
+	if err != nil {
+		fmt.Printf("GetMetadata: %v\n", err)
+		return nil, err
+	}
+	var metadata tree.Metadata
+	if err = tree.UnmarshalMetaData(metadataBytes, &metadata); err != nil {
+		fmt.Printf("UnmarshalMetaData: %v\n", err)
+		return nil, err
+	}
+
+	var (
+		chunkClosers []io.Closer
+		chunkReaders []io.Reader
+		multiReader  io.Reader
+	)
+
+	for _, v := range metadata.Chunks {
+		chunk, err := r.ring.StorageSystem.Get(v.Hash)
+		if err != nil {
+			fmt.Printf("GetFile: %v\n", err)
+			return nil, err
+		}
+		chunkReaders = append(chunkReaders, chunk)
+		chunkClosers = append(chunkClosers, chunk)
+	}
+
+	multiReader = io.MultiReader(chunkReaders...)
+
+	return &fileReader{
+		ReadCloser: multiReadCloser(multiReader, func() error {
+			for _, v := range chunkClosers {
+				if err := v.Close(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}),
+		FileSize: metadata.Size,
+		FileName: metadata.Filename,
+	}, nil
 }

@@ -124,7 +124,7 @@ func (s *Space) i_getMetadata(base, fileName string) ([]byte, error) {
 	if info.IsDir() {
 		return nil, ErrIsDir
 	}
-	data := make([]byte, info.Size()+1)
+	data := make([]byte, info.Size())
 	_, err = file.Read(data)
 	return data, err
 }

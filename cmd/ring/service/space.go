@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 
 	"github.com/ciiim/cloudborad/cmd/ring/ringapi"
 	"github.com/gin-gonic/gin"
@@ -100,4 +101,15 @@ func UploadFileTest(ctx *gin.Context) {
 	}
 	fmt.Printf("space: %v, base: %v\n", space, base)
 	fmt.Printf("file: %v\n", file.Size)
+}
+
+func Test(ctx *gin.Context) {
+	path := ctx.Param("path")
+
+	dir, file := filepath.Split(path)
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"dir":  dir,
+		"file": file,
+	})
 }

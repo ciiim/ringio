@@ -4,10 +4,6 @@ import (
 	"time"
 )
 
-const (
-	RemoteChunkCount = -1
-)
-
 type Info struct {
 	ChunkInfo *HashChunkInfo `json:"chunk_info"`
 	ExtraInfo *ExtraInfo     `json:"extra_info"`
