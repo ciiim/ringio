@@ -42,7 +42,7 @@ func (r *rpcServer) serve(port string) {
 		log.Println("[RPC Server] Listen error:", err)
 		return
 	}
-	//TODO: 注册节点服务
+	//TODO: 整合节点服务
 	fspb.RegisterHashChunkSystemServiceServer(r.s, r)
 	fspb.RegisterTreeFileSystemServiceServer(r.s, r)
 	err = r.s.Serve(l)

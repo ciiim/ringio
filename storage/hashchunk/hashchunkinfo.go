@@ -90,3 +90,10 @@ func (hcstat *HashChunkInfo) ModTime() time.Time {
 func (hcstat *HashChunkInfo) CreateTime() time.Time {
 	return hcstat.ChunkCreateTime
 }
+
+func (e *ExtraInfo) TagInfo(tag string) (any, bool) {
+	if e.Tag == tag {
+		return e.Extra, true
+	}
+	return nil, false
+}

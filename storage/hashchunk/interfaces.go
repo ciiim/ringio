@@ -9,8 +9,13 @@ type IHashChunkSystem interface {
 	CreateChunk(key []byte, name string, extra *ExtraInfo) (io.WriteCloser, error)
 	StoreBytes(key []byte, name string, value []byte, extra *ExtraInfo) error
 	StoreReader(key []byte, name string, v io.Reader, extra *ExtraInfo) error
+
 	Get(key []byte) (*HashChunk, error)
 	Delete(key []byte) error
+
+	GetInfo(key []byte) (*Info, error)
+	UpdateInfo(key []byte, info *Info) error
+
 	Cap() int64
 	Occupied(unit ...string) float64
 	Config() *Config

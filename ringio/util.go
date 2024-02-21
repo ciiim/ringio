@@ -70,6 +70,7 @@ func ReplicaInfoToPBReplicaInfo(info *replica.ReplicaObjectInfoG[*hashchunk.Hash
 		return nil
 	}
 	rci := &fspb.ReplicaChunkInfo{
+		Key:          info.Key,
 		ChunkInfo:    HashChunkInfoToPBChunkInfo(info.Custom),
 		ReplicaCount: int64(info.ExpectedReplicaCount),
 		Checksum:     info.Checksum,
@@ -84,7 +85,7 @@ func PBReplicaInfoToReplicaInfo(pb *fspb.ReplicaChunkInfo) *replica.ReplicaObjec
 	}
 	chunkInfo := PBChunkInfoToHashChunkInfo(pb.ChunkInfo)
 	return &replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo]{
-		Key:                  pb.ChunkInfo.ChunkHash,
+		Key:                  pb.Key,
 		ExpectedReplicaCount: int(pb.ReplicaCount),
 		Checksum:             pb.Checksum,
 		All:                  pb.NodeIds,

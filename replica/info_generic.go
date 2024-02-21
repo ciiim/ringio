@@ -1,6 +1,21 @@
 package replica
 
-import "slices"
+import (
+	"errors"
+	"slices"
+)
+
+var (
+	ErrReplicaInfoNotFound = errors.New("replica info not found")
+
+	ErrReplicaInfoKeyMismatch = errors.New("replica info key mismatch")
+
+	ErrReplicaInfoCountMismatch = errors.New("replica info count mismatch")
+
+	ErrReplicaInfoChecksumMismatch = errors.New("replica info checksum mismatch")
+
+	ErrReplicaInfoAllNodesMismatch = errors.New("replica info all nodes mismatch")
+)
 
 /*
 所有访问请求都会先访问主副本，如果找不到会将有效的第一个副本设置为主副本

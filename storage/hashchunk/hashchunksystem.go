@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/ciiim/cloudborad/database"
@@ -37,6 +38,8 @@ type HashChunkSystem struct {
 	calcChunkStoragePathFn CalcChunkStoragePathFn
 
 	HashFn Hash
+
+	rwMutex sync.RWMutex
 }
 
 type CalcChunkStoragePathFn = func(chunkStat *HashChunkInfo) string
@@ -108,6 +111,10 @@ func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, extra *Ext
 	if len(key) == 0 {
 		return nil, ErrEmptyKey
 	}
+
+	hcs.rwMutex.Lock()
+	defer hcs.rwMutex.Unlock()
+
 	// increase chunk counter
 	// if chunk is exist, just increase counter
 	// if chunk is not exist, create chunk info and store it
@@ -138,6 +145,9 @@ func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byt
 	if value == nil {
 		return fmt.Errorf("value is nil")
 	}
+
+	hcs.rwMutex.Lock()
+	defer hcs.rwMutex.Unlock()
 
 	// increase chunk counter
 	// if chunk is exist, just increase counter
@@ -186,6 +196,9 @@ func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reade
 		return fmt.Errorf("value is nil")
 	}
 
+	hcs.rwMutex.Lock()
+	defer hcs.rwMutex.Unlock()
+
 	// increase chunk counter
 	// if chunk is exist, just increase counter
 	// if chunk is not exist, create chunk info and store it
@@ -202,6 +215,7 @@ func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reade
 	hci := NewChunkInfo(chunkName, key, 0)
 	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
 	info := NewInfo(hci, extra)
+
 	if err := os.MkdirAll(hci.ChunkPath, os.ModePerm); err != nil {
 		return err
 	}
@@ -222,6 +236,10 @@ func (hcs *HashChunkSystem) Get(key []byte) (*HashChunk, error) {
 	if len(key) == 0 {
 		return nil, ErrEmptyKey
 	}
+
+	hcs.rwMutex.RLock()
+	defer hcs.rwMutex.RUnlock()
+
 	info, err := hcs.getInfo(key)
 	if err != nil {
 		return nil, err
@@ -237,6 +255,9 @@ func (hcs *HashChunkSystem) Delete(key []byte) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
+
+	hcs.rwMutex.Lock()
+	defer hcs.rwMutex.Unlock()
 
 	// decrease chunk counter
 	nowCounter, err := hcs.decreaseChunkCounter(key)
@@ -266,6 +287,28 @@ func (hcs *HashChunkSystem) Delete(key []byte) error {
 	//update Occupied
 	hcs.updateOccupied(hcs.occupied.Load() - info.ChunkInfo.ChunkSize)
 	return nil
+}
+
+func (hcs *HashChunkSystem) GetInfo(key []byte) (*Info, error) {
+	if len(key) == 0 {
+		return nil, ErrEmptyKey
+	}
+
+	hcs.rwMutex.RLock()
+	defer hcs.rwMutex.RUnlock()
+
+	return hcs.getInfo(key)
+}
+
+func (hcs *HashChunkSystem) UpdateInfo(key []byte, info *Info) error {
+	if len(key) == 0 {
+		return ErrEmptyKey
+	}
+
+	hcs.rwMutex.Lock()
+	defer hcs.rwMutex.Unlock()
+
+	return hcs.storeInfo(key, info)
 }
 
 func (hcs *HashChunkSystem) Opt(opt any) any {
