@@ -1,0 +1,1 @@
+./cloudborad --hostname node0 --root ./ring0  --http 8080 --nodes 127.0.0.1:9001

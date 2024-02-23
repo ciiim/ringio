@@ -1,6 +1,10 @@
 package node
 
 import (
+	"net"
+	"strconv"
+	"sync"
+
 	"github.com/ciiim/syncmember"
 )
 
@@ -11,22 +15,33 @@ type NodeService struct {
 
 	cMap *CMap
 
+	onceRO sync.Once
+
 	ro *NodeServiceRO
 }
 
 func NewNodeService(nodeName string, port int, replicas int) *NodeService {
+
 	ns := &NodeService{
-		sync: syncmember.NewSyncMember(nodeName, syncmember.DefaultConfig().SetPort(port)),
-		cMap: NewCMap(replicas, nil),
+		sync:   syncmember.NewSyncMember(nodeName, syncmember.DefaultConfig().SetPort(port)),
+		cMap:   NewCMap(replicas, nil),
+		onceRO: sync.Once{},
 	}
 	self := ns.sync.Node()
 
-	ns.self = NewNode(self.String(), self.Name)
+	//FIXME: 临时解决方案
+	addr := net.JoinHostPort(self.IP.String(), strconv.Itoa(self.Port+1))
 
-	t := NewNode(ns.self.Addr(), ns.self.nodeName)
+	ns.self = NewNode(addr, self.Name)
 
-	ns.cMap.Add(t)
+	ns.sync.SetNodeDelegate(ns)
+
+	ns.cMap.Add(ns.self)
 	return ns
+}
+
+func (n *NodeService) Join(addr string) error {
+	return n.sync.Join(addr)
 }
 
 func (n *NodeService) Self() *Node {
@@ -43,6 +58,6 @@ func (n *NodeService) Shutdown() {
 
 func (n *NodeService) AsyncRun() {
 	go func() {
-		_ = n.sync.Run()
+		_ = n.Run()
 	}()
 }

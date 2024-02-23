@@ -26,20 +26,13 @@ func (r *rpcServer) PutReplica(stream fspb.HashChunkSystemService_PutReplicaServ
 	}
 	replicaInfo.ClearCustom()
 	//新建一个chunk
-	w, err := r.hcs.local().CreateChunk(chunkInfo.ChunkHash, chunkInfo.ChunkName, hashchunk.NewExtraInfo("replica", replicaInfo))
+	w, err := r.hcs.local().CreateChunk(chunkInfo.ChunkHash, chunkInfo.ChunkName, chunkInfo.ChunkSize, hashchunk.NewExtraInfo("replica", replicaInfo))
 	if err != nil {
 		stream.SendAndClose(&fspb.Error{Operation: "New Chunk", Err: err.Error()})
 		return nil
 	}
 	defer func() {
-		hashwc, ok := w.(*hashchunk.HashChunkWriteCloser)
-		if !ok {
-			w.Close()
-			return
-		}
-		// Flush and close the chunk
-		_ = hashwc.Flush()
-		hashwc.Close()
+		w.Close()
 	}()
 	for {
 		req, err := stream.Recv()
@@ -91,9 +84,9 @@ func (s *rpcServer) GetReplica(key *fspb.Key, stream fspb.HashChunkSystemService
 
 	var bufSize int64
 	// 1/16 of the chunk size
-	if bufSize = chunk.Info().ChunkInfo.ChunkSize >> 4; s.defaultBufferSize > bufSize {
+	if bufSize = chunk.Info().ChunkInfo.ChunkSize >> 4; s.RPCBufferSize > bufSize {
 		// 小于默认缓冲区大小，使用默认缓冲区大小
-		bufSize = s.defaultBufferSize
+		bufSize = s.RPCBufferSize
 	}
 
 	buffer := make([]byte, bufSize)
@@ -250,7 +243,9 @@ func (s *rpcServer) UpdateReplicaInfo(ctx context.Context, remoteInfo *fspb.Repl
 		remoteReplicaInfo.ClearCustom()
 		info.ExtraInfo.Extra = remoteReplicaInfo
 
-		if err := s.hcs.local().UpdateInfo(LocalreplicaInfoG.Key, info); err != nil {
+		if err := s.hcs.local().UpdateInfo(LocalreplicaInfoG.Key, func(oldInfo *hashchunk.Info) {
+			oldInfo = info
+		}); err != nil {
 			errCh <- &fspb.Error{Operation: "Update Replica Info", Err: err.Error()}
 			return
 		}

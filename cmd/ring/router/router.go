@@ -6,24 +6,34 @@ import (
 )
 
 func Router() *gin.Engine {
-	g := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	g := gin.New()
+	g.Use(gin.Logger(), gin.Recovery())
 	initRouter(g)
 	return g
 }
 
 func initRouter(g *gin.Engine) {
 
-	g.GET("/test/*path", service.Test)
+	fileGroup := g.Group("/file")
+	{
+		fileGroup.GET("/:space/*path", service.GetFileContent)
 
-	g.GET("/filecontent/:space/*path", service.GetFileContent)
+		// 上传文件
+		fileGroup.POST("/:space/upload", service.UploadFile)
 
-	g.POST("/space/:space", service.GetSpaceWithDir)
+		//删除文件
+		fileGroup.DELETE("/:space/*path", service.DeleteFile)
+	}
 
-	// 上传文件
-	g.POST("/file/upload/:space", service.UploadFile)
+	spaceGroup := g.Group("/space")
+	{
+		// 创建space
+		spaceGroup.POST("/", service.CreateSpace)
 
-	// 创建space
-	g.POST("/space", service.CreateSpace)
+		spaceGroup.POST("/:space", service.GetSpaceWithDir)
+
+	}
 
 	// // 删除space
 	// g.DELETE("/space/:space", service.DeleteSpace)
@@ -33,9 +43,6 @@ func initRouter(g *gin.Engine) {
 
 	// // 删除文件夹
 	// g.DELETE("/dir/:space", service.DeleteDir)
-
-	// // 删除文件
-	// g.DELETE("/file/:space", service.DeleteFile)
 
 	// // 重命名文件
 	// g.PUT("/file/:space", service.RenameFile)

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/ciiim/cloudborad/storage/types"
 )
@@ -21,7 +20,7 @@ const (
 type DirEntry = fs.DirEntry
 
 type TreeFileSystem struct {
-	rootPath string
+	config *Config
 }
 
 var _ ITreeFileSystem = (*TreeFileSystem)(nil)
@@ -32,33 +31,33 @@ const (
 	BASE_DIR   = "__BASE__"
 )
 
-func NewTreeFileSystem(rootPath string) *TreeFileSystem {
-	err := os.MkdirAll(rootPath, os.ModePerm)
+func NewTreeFileSystem(config *Config) *TreeFileSystem {
+	err := os.MkdirAll(config.RootPath, os.ModePerm)
 	if err != nil {
 		return nil
 	}
 	t := &TreeFileSystem{
-		rootPath: rootPath,
+		config: config,
 	}
 	return t
 }
 
 func (t *TreeFileSystem) NewLocalSpace(space string, cap types.Byte) error {
 
-	if _, err := os.Stat(filepath.Join(t.rootPath, space, BASE_DIR)); err == nil {
+	if _, err := os.Stat(filepath.Join(t.config.RootPath, space, BASE_DIR)); err == nil {
 		return ErrSpaceExist
 	}
 
-	err := os.Mkdir(filepath.Join(t.rootPath, space), 0755)
+	err := os.Mkdir(filepath.Join(t.config.RootPath, space), 0755)
 	if err != nil {
 		return err
 	}
-	err = os.Mkdir(filepath.Join(t.rootPath, space, BASE_DIR), 0755)
+	err = os.Mkdir(filepath.Join(t.config.RootPath, space, BASE_DIR), 0755)
 	if err != nil {
 		return err
 	}
 
-	file, err := os.Create(filepath.Join(t.rootPath, space, STAT_FILE))
+	file, err := os.Create(filepath.Join(t.config.RootPath, space, STAT_FILE))
 	if err != nil {
 		return err
 	}
@@ -69,7 +68,7 @@ func (t *TreeFileSystem) NewLocalSpace(space string, cap types.Byte) error {
 }
 
 func (t *TreeFileSystem) GetLocalSpace(space string) *Space {
-	file, err := os.Open(filepath.Join(t.rootPath, space, STAT_FILE))
+	file, err := os.Open(filepath.Join(t.config.RootPath, space, STAT_FILE))
 	if err != nil {
 		log.Println("[Space] Lack of stat file", err)
 		return nil
@@ -87,10 +86,9 @@ func (t *TreeFileSystem) GetLocalSpace(space string) *Space {
 	cap, _ := strconv.ParseInt(capANDoccupy[0], 10, 64)
 	occupy, _ := strconv.ParseInt(capANDoccupy[1], 10, 64)
 	s := &Space{
-		root:     t.rootPath,
+		root:     t.config.RootPath,
 		spaceKey: space,
 		base:     BASE_DIR,
-		spaceMu:  sync.Mutex{},
 		capacity: cap,
 		occupy:   occupy,
 	}
@@ -98,10 +96,10 @@ func (t *TreeFileSystem) GetLocalSpace(space string) *Space {
 }
 
 func (t *TreeFileSystem) DeleteLocalSpace(space string) error {
-	if _, err := os.Stat(filepath.Join(t.rootPath, space, BASE_DIR)); err != nil {
+	if _, err := os.Stat(filepath.Join(t.config.RootPath, space, BASE_DIR)); err != nil {
 		return ErrSpaceNotFound
 	}
-	return os.RemoveAll(filepath.Join(t.rootPath, space))
+	return os.RemoveAll(filepath.Join(t.config.RootPath, space))
 }
 
 func (t *TreeFileSystem) MakeDir(space, base, name string) error {
@@ -162,7 +160,7 @@ func (t *TreeFileSystem) PutMetadata(space, base, name string, fileHash []byte, 
 	return sp.storeMetaData(base, name, metadata)
 
 }
-func (t *TreeFileSystem) DeleteMetadata(space, base, name string, hash []byte) error {
+func (t *TreeFileSystem) DeleteMetadata(space, base, name string) error {
 	sp := t.GetLocalSpace(space)
 	if sp == nil {
 		return ErrSpaceNotFound

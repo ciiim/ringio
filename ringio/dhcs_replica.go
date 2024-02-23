@@ -11,6 +11,10 @@ import (
 	"github.com/ciiim/cloudborad/storage/hashchunk"
 )
 
+var (
+	ErrChunkRecovering = errors.New("chunk recovering")
+)
+
 /*
 恢复中的Chunk的外部操作
 
@@ -22,23 +26,48 @@ import (
 type recoveringChunk struct {
 	// map[<[]byte>] *count <- int64
 	m sync.Map
+
+	// 文件恢复完成后的回调
+	Finalize func(key []byte, finalCount int64)
 }
 
+// count记录恢复过程中的操作次数，+1表示有一个存储操作，-1表示有一个删除操作
+// 如果最后恢复完的chunkinfo的引用计数减去count小于等于0，删除该chunk
 type count struct {
 	count int64
 }
 
-func (r *recoveringChunk) registerChunk(key []byte) {
+func (r *recoveringChunk) isRecovering(key []byte) bool {
 	k := string(key)
-	r.m.Store(k, &count{0})
+	_, ok := r.m.Load(k)
+	return ok
+}
+
+// 并发安全
+func (r *recoveringChunk) registerChunk(key []byte) bool {
+	k := string(key)
+	_, exist := r.m.LoadOrStore(k, &count{0})
+	if exist {
+		return false
+	}
+	return true
 }
 
 func (r *recoveringChunk) unregisterChunk(key []byte) {
 	k := string(key)
-	r.m.Delete(k)
+	v, ok := r.m.LoadAndDelete(k)
+	if !ok {
+		return
+	}
+
+	count := v.(*count)
+
+	if r.Finalize != nil {
+		r.Finalize(key, count.count)
+	}
 }
 
-func (r *recoveringChunk) addAction(key []byte) (ok bool) {
+func (r *recoveringChunk) addCount(key []byte) (ok bool) {
 	k := string(key)
 	v, ok := r.m.Load(k)
 	if !ok {
@@ -53,7 +82,7 @@ func (r *recoveringChunk) addAction(key []byte) (ok bool) {
 	return true
 }
 
-func (r *recoveringChunk) delAction(key []byte) (ok bool) {
+func (r *recoveringChunk) minusCount(key []byte) (ok bool) {
 	k := string(key)
 	v, ok := r.m.Load(k)
 	if !ok {

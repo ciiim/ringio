@@ -1,6 +1,8 @@
 package ringio
 
 import (
+	"log/slog"
+
 	"github.com/ciiim/cloudborad/node"
 	"github.com/ciiim/cloudborad/storage/tree"
 	"github.com/ciiim/cloudborad/storage/types"
@@ -16,15 +18,17 @@ type DTreeFileSystem struct {
 	local  *tree.TreeFileSystem
 	remote *rpcTreeClient
 	ns     *node.NodeServiceRO
+	l      *slog.Logger
 }
 
 var _ ITreeDFileSystem = (*DTreeFileSystem)(nil)
 
-func NewDTreeFileSystem(rootPath string, ns *node.NodeServiceRO) *DTreeFileSystem {
+func NewDTreeFileSystem(config *tree.Config, ns *node.NodeServiceRO, logger *slog.Logger) *DTreeFileSystem {
 	TreeDFileSystem := &DTreeFileSystem{
-		local:  tree.NewTreeFileSystem(rootPath),
+		local:  tree.NewTreeFileSystem(config),
 		remote: newRPCTreeClient(),
 		ns:     ns,
+		l:      logger,
 	}
 	return TreeDFileSystem
 
@@ -40,9 +44,6 @@ func (dt *DTreeFileSystem) pickNode(key []byte) *node.Node {
 
 func (dt *DTreeFileSystem) NewSpace(space string, cap types.Byte) error {
 	ni := dt.pickNode([]byte(space))
-	if ni == nil {
-		return tree.ErrSpaceNotFound
-	}
 	if dt.ns.Self().Equal(ni) {
 		return dt.local.NewLocalSpace(space, cap)
 	}
@@ -107,9 +108,7 @@ func (dt *DTreeFileSystem) DeleteDir(space, base, name string) error {
 
 func (dt *DTreeFileSystem) GetDirSub(space, base, name string) ([]*tree.SubInfo, error) {
 	ni := dt.pickNode([]byte(space))
-	if ni == nil {
-		return nil, tree.ErrSpaceNotFound
-	}
+
 	if dt.ns.Self().Equal(ni) {
 		return dt.local.GetDirSub(space, base, name)
 	}
@@ -120,9 +119,7 @@ func (dt *DTreeFileSystem) GetDirSub(space, base, name string) ([]*tree.SubInfo,
 
 func (dt *DTreeFileSystem) GetMetadata(space, base, name string) ([]byte, error) {
 	ni := dt.pickNode([]byte(space))
-	if ni == nil {
-		return nil, tree.ErrSpaceNotFound
-	}
+
 	if dt.ns.Self().Equal(ni) {
 		return dt.local.GetMetadata(space, base, name)
 	}
@@ -133,9 +130,7 @@ func (dt *DTreeFileSystem) GetMetadata(space, base, name string) ([]byte, error)
 
 func (dt *DTreeFileSystem) PutMetadata(space, base, name string, fileHash []byte, metadata []byte) error {
 	ni := dt.pickNode([]byte(space))
-	if ni == nil {
-		return tree.ErrSpaceNotFound
-	}
+
 	if dt.ns.Self().Equal(ni) {
 		return dt.local.PutMetadata(space, base, name, fileHash, metadata)
 	}
@@ -143,17 +138,16 @@ func (dt *DTreeFileSystem) PutMetadata(space, base, name string, fileHash []byte
 	defer cancel()
 	return dt.remote.putMetadata(ctx, ni, space, base, name, metadata)
 }
-func (dt *DTreeFileSystem) DeleteMetadata(space, base, name string, hash []byte) error {
+func (dt *DTreeFileSystem) DeleteMetadata(space, base, name string) error {
 	ni := dt.pickNode([]byte(space))
-	if ni == nil {
-		return tree.ErrSpaceNotFound
-	}
+
 	if dt.ns.Self().Equal(ni) {
-		return dt.local.DeleteMetadata(space, base, name, hash)
+		println("delete metadata local")
+		return dt.local.DeleteMetadata(space, base, name)
 	}
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
-	return dt.remote.deleteMetadata(ctx, ni, space, base, name, hash)
+	return dt.remote.deleteMetadata(ctx, ni, space, base, name)
 }
 
 func (dt *DTreeFileSystem) Node() *node.NodeServiceRO {

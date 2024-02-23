@@ -1,50 +1,70 @@
 package ringio
 
 import (
-	"log"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/ciiim/cloudborad/node"
+	"github.com/ciiim/cloudborad/storage/hashchunk"
+	"github.com/ciiim/cloudborad/storage/tree"
 	"github.com/ciiim/cloudborad/storage/types"
 )
 
 const (
 	DefaultChunkSize types.Byte = 1024 * 1024 * 32 // 32MB
 	DefaultPort      int        = 9631
-	DefualtReplica   int        = 5
+	DefualtReplica   int        = 20
 	DefaultName      string     = "ring"
 )
 
 type Ring struct {
+	StorageSystem IDHashChunkSystem
+	FrontSystem   ITreeDFileSystem
+
+	config *RingConfig
+
 	ringName string
 
 	nodeService *node.NodeService
 
 	rpcServer *rpcServer
 
-	FrontSystem ITreeDFileSystem
-
-	StorageSystem IDHashChunkSystem
-
 	l *slog.Logger
 }
 
-func NewRing(ringName string, logger *slog.Logger, nodeService *node.NodeService, frontSystem ITreeDFileSystem, storageSystem IDHashChunkSystem) *Ring {
-	if frontSystem == nil {
-		log.Println("[Ring init] Empty front system")
-		return nil
-	}
-	if storageSystem == nil {
-		log.Println("[Ring init] Empty store system")
-		return nil
-	}
+func NewRing(config *RingConfig) *Ring {
+
+	node := node.NewNodeService(config.Name, config.Port, config.Replica)
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: config.LogLevel}))
+
+	storageSystem := NewDHCS(
+		&hashchunk.Config{
+			RootPath:          filepath.Join(config.RootPath, "ds"),
+			Capacity:          -1,
+			ChunkMaxSize:      config.ChunkMaxSize,
+			HashFn:            config.HashFn,
+			CalcStoragePathFn: nil,
+		},
+		node.NodeServiceRO(),
+		logger,
+	)
+
+	frontSystem := NewDTreeFileSystem(
+		&tree.Config{
+			RootPath: filepath.Join(config.RootPath, "tfs"),
+		},
+		node.NodeServiceRO(),
+		logger,
+	)
 
 	ring := &Ring{
-		ringName: ringName,
+		ringName: config.Name,
 
 		// 节点服务
-		nodeService: nodeService,
+		nodeService: node,
 
 		// 存储系统
 		StorageSystem: storageSystem,
@@ -53,10 +73,12 @@ func NewRing(ringName string, logger *slog.Logger, nodeService *node.NodeService
 		FrontSystem: frontSystem,
 
 		// rpc服务
-		rpcServer: newRPCFSServer(nodeService.NodeServiceRO(), storageSystem, frontSystem),
+		rpcServer: newRPCFSServer(node.NodeServiceRO(), storageSystem, frontSystem),
 
 		// 日志
 		l: logger,
+
+		config: config,
 	}
 	return ring
 }
@@ -69,11 +91,9 @@ func (r *Ring) Serve() {
 	go func() {
 		_ = r.nodeService.Run()
 	}()
-	//FIXME: 要使用同一个端口
 	rpcPort, _ := strconv.ParseInt(r.nodeService.Self().Port(), 10, 64)
-	rpcPort++
 
-	r.l.Info("[Ring] node service serve on", "port", r.nodeService.Self().Port())
+	r.l.Info("[Ring] Service serve on", "port", rpcPort)
 	r.rpcServer.serve(strconv.FormatInt(rpcPort, 10))
 }
 

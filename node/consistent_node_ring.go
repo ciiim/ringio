@@ -16,10 +16,6 @@ func NewCMap(replicas int, fn chash.ConsistentHashFn) *CMap {
 	}
 }
 
-func (c *CMap) Add(node *Node) {
-	c.ConsistentHash.Add(node)
-}
-
 func (c *CMap) GetByNodeID(nodeID string) *Node {
 	node, ok := c.ConsistentHash.GetByID(nodeID).(*Node)
 	if !ok {
@@ -30,18 +26,12 @@ func (c *CMap) GetByNodeID(nodeID string) *Node {
 
 func (c *CMap) Get(key []byte) *Node {
 	item := c.ConsistentHash.Get(key)
-	if item == nil {
-		return nil
-	}
+
 	node, ok := item.(*Node)
 	if !ok {
 		return nil
 	}
 	return node
-}
-
-func (c *CMap) Del(node *Node) {
-	c.ConsistentHash.Del(node)
 }
 
 func (c *CMap) GetN(key []byte, n int) []*Node {

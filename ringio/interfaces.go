@@ -21,12 +21,12 @@ type IDHashChunkSystem interface {
 
 	Delete(key []byte) error
 
-	StoreReader(key []byte, name string, reader io.Reader, extra *hashchunk.ExtraInfo) error
+	StoreReader(key []byte, name string, size int64, reader io.Reader, extra *hashchunk.ExtraInfo) error
 
-	StoreBytes(key []byte, name string, v []byte, extra *hashchunk.ExtraInfo) error
+	StoreBytes(key []byte, name string, size int64, v []byte, extra *hashchunk.ExtraInfo) error
 
-	// 修复chunk，从其它节点获取chunk
-	HealChunk(chunkKey []byte) (IDHashChunk, error)
+	// 从其它节点查找chunk
+	FindChunk(chunkKey []byte) (IDHashChunk, error)
 }
 
 type ITreeDFileSystem interface {
@@ -48,5 +48,5 @@ type ITreeDFileSystem interface {
 
 	GetMetadata(space, base, name string) ([]byte, error)
 	PutMetadata(space, base, name string, hash []byte, data []byte) error
-	DeleteMetadata(space, base, name string, hash []byte) error
+	DeleteMetadata(space, base, name string) error
 }

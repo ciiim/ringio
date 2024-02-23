@@ -44,7 +44,7 @@ func (r *rpcHashClient) putReplica(
 
 	content.Info = nil
 
-	buffer := make([]byte, r.BufferSize)
+	buffer := make([]byte, r.RPCBufferSize)
 	var buffered int64 = 0
 	for {
 		n, err := reader.Read(buffer[buffered:])
@@ -55,7 +55,7 @@ func (r *rpcHashClient) putReplica(
 			return err
 		}
 		buffered += int64(n)
-		if buffered < r.BufferSize {
+		if buffered < r.RPCBufferSize {
 			continue
 		}
 		content.Data = buffer[:buffered]
@@ -105,7 +105,7 @@ func (r *rpcHashClient) getReplica(ctx context.Context, node *node.Node, key *fs
 	replicaInfo := PBReplicaInfoToReplicaInfo(resp.Info)
 	chunkInfo := replicaInfo.Custom
 	// 如果chunk大小超过默认buffer大小，写入临时文件中
-	if chunkInfo.Size() > r.BufferSize {
+	if chunkInfo.Size() > r.RPCBufferSize {
 		chunkTempFile, err := os.CreateTemp(os.TempDir(), "remote-chunk-replica-")
 		if err != nil {
 			return nil, replicaInfo, err

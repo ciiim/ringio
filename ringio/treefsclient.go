@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ciiim/cloudborad/chunkpool"
-	dlogger "github.com/ciiim/cloudborad/debug"
 	"github.com/ciiim/cloudborad/node"
 	"github.com/ciiim/cloudborad/ringio/fspb"
 	"github.com/ciiim/cloudborad/storage/tree"
@@ -17,19 +15,11 @@ import (
 type rpcTreeClient struct {
 }
 
-func newRPCHashClient(pool *chunkpool.ChunkPool) *rpcHashClient {
-	return &rpcHashClient{
-		BufferSize: DefaultBufferSize,
-		pool:       pool,
-	}
-}
-
 func newRPCTreeClient() *rpcTreeClient {
 	return &rpcTreeClient{}
 }
 
 func (r *rpcTreeClient) getMetadata(ctx context.Context, ni *node.Node, space string, base string, name string) ([]byte, error) {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "GetMetadata from %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -49,7 +39,6 @@ func (r *rpcTreeClient) getMetadata(ctx context.Context, ni *node.Node, space st
 }
 
 func (r *rpcTreeClient) putMetadata(ctx context.Context, ni *node.Node, space string, base string, name string, data []byte) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "PutMetadata to %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -73,8 +62,7 @@ func (r *rpcTreeClient) putMetadata(ctx context.Context, ni *node.Node, space st
 	return respErr
 }
 
-func (r *rpcTreeClient) deleteMetadata(ctx context.Context, ni *node.Node, space string, base string, name string, hash []byte) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "DeleteMetadata in %s", ni.Addr())
+func (r *rpcTreeClient) deleteMetadata(ctx context.Context, ni *node.Node, space string, base string, name string) error {
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -82,20 +70,22 @@ func (r *rpcTreeClient) deleteMetadata(ctx context.Context, ni *node.Node, space
 	defer conn.Close()
 
 	client := fspb.NewTreeFileSystemServiceClient(conn)
-	_, err = client.DeleteMetadata(ctx, &fspb.TreeFileSystemBasicRequest{
+	resp, err := client.DeleteMetadata(ctx, &fspb.TreeFileSystemBasicRequest{
 		Space: space,
 		Base:  base,
 		Name:  name,
-		Hash:  hash,
 	})
 	if err != nil {
 		return err
+	}
+
+	if resp.GetErr() != "" {
+		return errors.New(resp.GetErr())
 	}
 	return nil
 }
 
 func (r *rpcTreeClient) makeDir(ctx context.Context, ni *node.Node, space string, base string, dir string) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "MakeDir in %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -115,7 +105,6 @@ func (r *rpcTreeClient) makeDir(ctx context.Context, ni *node.Node, space string
 }
 
 func (r *rpcTreeClient) renameDir(ctx context.Context, ni *node.Node, space string, base string, dir string, newName string) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "RenameDir in %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -138,7 +127,6 @@ func (r *rpcTreeClient) renameDir(ctx context.Context, ni *node.Node, space stri
 }
 
 func (r *rpcTreeClient) deleteDir(ctx context.Context, ni *node.Node, space string, base string, dir string) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "DeleteDir in %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -158,7 +146,6 @@ func (r *rpcTreeClient) deleteDir(ctx context.Context, ni *node.Node, space stri
 }
 
 func (r *rpcTreeClient) getDirSub(ctx context.Context, ni *node.Node, space string, base string, dir string) ([]*tree.SubInfo, error) {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "GetDirSub from %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -178,7 +165,6 @@ func (r *rpcTreeClient) getDirSub(ctx context.Context, ni *node.Node, space stri
 }
 
 func (r *rpcTreeClient) newSpace(ctx context.Context, ni *node.Node, space string, cap types.Byte) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "NewSpace in %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -186,18 +172,20 @@ func (r *rpcTreeClient) newSpace(ctx context.Context, ni *node.Node, space strin
 	defer conn.Close()
 
 	client := fspb.NewTreeFileSystemServiceClient(conn)
-	_, err = client.NewSpace(ctx, &fspb.NewSpaceRequest{
+	resp, err := client.NewSpace(ctx, &fspb.NewSpaceRequest{
 		Space: space,
 		Cap:   int64(cap),
 	})
 	if err != nil {
 		return err
 	}
+	if resp.GetErr() != "" {
+		return errors.New(resp.GetErr())
+	}
 	return nil
 }
 
 func (r *rpcTreeClient) deleteSpace(ctx context.Context, ni *node.Node, space string) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "DeleteSpace in %s", ni.Addr())
 	conn, err := grpc.Dial(ni.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err

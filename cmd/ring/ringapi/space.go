@@ -38,24 +38,24 @@ func (r *RingAPI) NewSpace(space string, cap types.Byte) error {
 		// FIXME: return error
 		return nil
 	}
-	return r.ring.FrontSystem.NewSpace(space, cap)
+	return r.FrontSystem.NewSpace(space, cap)
 }
 
 func (r *RingAPI) MakeDir(space, base, name string) error {
-	return r.ring.FrontSystem.MakeDir(space, base, name)
+	return r.FrontSystem.MakeDir(space, base, name)
 }
 
 func (r *RingAPI) RenameDir(space, base, name, newName string) error {
-	return r.ring.FrontSystem.RenameDir(space, base, name, newName)
+	return r.FrontSystem.RenameDir(space, base, name, newName)
 }
 
 func (r *RingAPI) DeleteDir(space, base, name string) error {
-	return r.ring.FrontSystem.DeleteDir(space, base, name)
+	return r.FrontSystem.DeleteDir(space, base, name)
 }
 
 func (r *RingAPI) SpaceWithDir(space string, base, dir string) (*UserDir, error) {
 	base = handleBaseDir(base)
-	subInfo, err := r.ring.FrontSystem.GetDirSub(space, base, dir)
+	subInfo, err := r.FrontSystem.GetDirSub(space, base, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (r *RingAPI) SpaceWithDir(space string, base, dir string) (*UserDir, error)
 
 func (r *RingAPI) PutFile(space, base, name string, fileHash []byte, fileSize int64, file multipart.File) error {
 	base = handleBaseDir(base)
-	chunkMaxSize := r.ring.StorageSystem.Config().ChunkMaxSize()
+	chunkMaxSize := r.StorageSystem.Config().ChunkMaxSize
 	if fileSize > chunkMaxSize {
 		return r.putFileSplit(space, base, name, chunkMaxSize, fileHash, fileSize, file)
 	}
@@ -97,19 +97,21 @@ func (r *RingAPI) putFile(space, base, name string, fileHash []byte, fileSize in
 	if err != nil {
 		return err
 	}
-	if err = r.ring.FrontSystem.PutMetadata(space, base, name, fileHash, metadataBytes); err != nil {
+	if err = r.FrontSystem.PutMetadata(space, base, name, fileHash, metadataBytes); err != nil {
 		return err
 	}
 
 	//存储文件
-	return r.ring.StorageSystem.StoreReader(fileHash, hex.EncodeToString(fileHash), file, nil)
+	return r.StorageSystem.StoreReader(fileHash, hex.EncodeToString(fileHash), fileSize, file, nil)
 }
 
 // 分片存储文件
 func (r *RingAPI) putFileSplit(space, base, name string, chunkSize int64, fileHash []byte, fileSize int64, file multipart.File) error {
 	// 计算分片数量
-	chunkNum := int(math.Ceil(float64(fileSize) / float64(chunkSize)))
+	println("filesize", fileSize, "chunksize", chunkSize)
 
+	chunkNum := int(math.Ceil(float64(fileSize) / float64(chunkSize)))
+	println("chunkNum:", chunkNum)
 	//创建分片Reader
 	chunkReaders := make([]*io.SectionReader, chunkNum)
 	chunks := make([]*tree.FileChunk, chunkNum)
@@ -132,7 +134,7 @@ func (r *RingAPI) putFileSplit(space, base, name string, chunkSize int64, fileHa
 			}
 			chunks[i] = tree.NewFileChunk(
 				chunkReader.Size(),
-				chunkBuffer.Hash(r.ring.StorageSystem.Config().HashFn()),
+				chunkBuffer.Hash(r.StorageSystem.Config().HashFn),
 			)
 			if _, err := chunkReaders[i].Seek(0, io.SeekStart); err != nil {
 				return err
@@ -150,15 +152,16 @@ func (r *RingAPI) putFileSplit(space, base, name string, chunkSize int64, fileHa
 		return err
 	}
 
-	if err = r.ring.FrontSystem.PutMetadata(space, base, name, fileHash, metadataBytes); err != nil {
+	if err = r.FrontSystem.PutMetadata(space, base, name, fileHash, metadataBytes); err != nil {
 		return err
 	}
 
 	//存储分片
 	for i, chunkReader := range chunkReaders {
-		if err := r.ring.StorageSystem.StoreReader(
+		if err := r.StorageSystem.StoreReader(
 			chunks[i].Hash,
 			hex.EncodeToString(chunks[i].Hash),
+			chunks[i].Size,
 			chunkReader,
 			nil,
 		); err != nil {
@@ -179,7 +182,7 @@ type fileReader struct {
 // 下载文件
 func (r *RingAPI) GetFile(space, base, name string) (*fileReader, error) {
 	base = handleBaseDir(base)
-	metadataBytes, err := r.ring.FrontSystem.GetMetadata(space, base, name+".meta")
+	metadataBytes, err := r.FrontSystem.GetMetadata(space, base, name)
 	if err != nil {
 		fmt.Printf("GetMetadata: %v\n", err)
 		return nil, err
@@ -197,7 +200,7 @@ func (r *RingAPI) GetFile(space, base, name string) (*fileReader, error) {
 	)
 
 	for _, v := range metadata.Chunks {
-		chunk, err := r.ring.StorageSystem.Get(v.Hash)
+		chunk, err := r.StorageSystem.Get(v.Hash)
 		if err != nil {
 			fmt.Printf("GetFile: %v\n", err)
 			return nil, err
@@ -220,4 +223,26 @@ func (r *RingAPI) GetFile(space, base, name string) (*fileReader, error) {
 		FileSize: metadata.Size,
 		FileName: metadata.Filename,
 	}, nil
+}
+
+func (r *RingAPI) DeleteFile(space, base, name string) error {
+	base = handleBaseDir(base)
+	metadataBytes, err := r.FrontSystem.GetMetadata(space, base, name)
+	if err != nil {
+		return err
+	}
+
+	var metadata tree.Metadata
+
+	if err = tree.UnmarshalMetaData(metadataBytes, &metadata); err != nil {
+		return err
+	}
+
+	for _, v := range metadata.Chunks {
+		if err := r.StorageSystem.Delete(v.Hash); err != nil {
+			return err
+		}
+	}
+
+	return r.FrontSystem.DeleteMetadata(space, base, name)
 }

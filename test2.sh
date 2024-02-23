@@ -1,0 +1,1 @@
+./cloudborad --hostname node1 --root ./ring1  --http 8081 -p 9001 --nodes 127.0.0.1:9631

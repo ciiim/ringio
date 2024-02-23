@@ -11,13 +11,14 @@ import (
 )
 
 const (
-	DefaultBufferSize types.Byte = 4 * types.MB
+	// GRPC消息默认最大大小为4MB
+	DefaultRPCBufferSize types.Byte = 1 * types.MB
 )
 
 type rpcServer struct {
 	s *grpc.Server
 
-	defaultBufferSize int64
+	RPCBufferSize int64
 
 	hcs         IDHashChunkSystem
 	tfs         ITreeDFileSystem
@@ -28,11 +29,11 @@ type rpcServer struct {
 
 func newRPCFSServer(ns *node.NodeServiceRO, hfs IDHashChunkSystem, tfs ITreeDFileSystem) *rpcServer {
 	return &rpcServer{
-		nodeService:       ns,
-		hcs:               hfs,
-		tfs:               tfs,
-		s:                 grpc.NewServer(),
-		defaultBufferSize: DefaultBufferSize,
+		nodeService:   ns,
+		hcs:           hfs,
+		tfs:           tfs,
+		s:             grpc.NewServer(),
+		RPCBufferSize: DefaultRPCBufferSize,
 	}
 }
 

@@ -1,12 +1,16 @@
 package hashchunk
 
 import (
-	"bufio"
 	"io"
+	"os"
+)
+
+var (
+	ErrCannotBeWritten = os.ErrPermission
 )
 
 type HashChunk struct {
-	io.ReadCloser
+	io.ReadSeekCloser
 	info *Info
 }
 
@@ -19,34 +23,11 @@ func (c *HashChunk) SetInfo(info *Info) {
 }
 
 type HashChunkWriteCloser struct {
-	closed bool
-	w      *bufio.Writer
-	closer io.Closer
+	io.WriteCloser
 }
 
-func warpHashChunkWriteCloser(wc io.WriteCloser) *HashChunkWriteCloser {
-	bufw := bufio.NewWriter(wc)
-	return &HashChunkWriteCloser{
-		w:      bufw,
-		closer: wc,
+func warpHashChunkWriteCloser(wc io.WriteCloser) HashChunkWriteCloser {
+	return HashChunkWriteCloser{
+		wc,
 	}
-}
-
-func (c *HashChunkWriteCloser) Flush() error {
-	return c.w.Flush()
-}
-
-func (c *HashChunkWriteCloser) Close() error {
-	if err := c.closer.Close(); err != nil {
-		return err
-	}
-	c.closed = true
-	return nil
-}
-
-func (c *HashChunkWriteCloser) Write(p []byte) (n int, err error) {
-	if c.closed {
-		return 0, io.ErrClosedPipe
-	}
-	return c.w.Write(p)
 }

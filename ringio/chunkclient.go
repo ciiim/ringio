@@ -3,12 +3,12 @@ package ringio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"time"
 
 	"github.com/ciiim/cloudborad/chunkpool"
-	dlogger "github.com/ciiim/cloudborad/debug"
 	"github.com/ciiim/cloudborad/node"
 	"github.com/ciiim/cloudborad/ringio/fspb"
 	"github.com/ciiim/cloudborad/storage/hashchunk"
@@ -22,8 +22,15 @@ const (
 )
 
 type rpcHashClient struct {
-	BufferSize int64
-	pool       *chunkpool.ChunkPool
+	RPCBufferSize int64
+	pool          *chunkpool.ChunkPool
+}
+
+func newRPCHashClient(pool *chunkpool.ChunkPool) *rpcHashClient {
+	return &rpcHashClient{
+		RPCBufferSize: DefaultRPCBufferSize,
+		pool:          pool,
+	}
 }
 
 func ctxWithTimeout() (context.Context, context.CancelFunc) {
@@ -55,7 +62,12 @@ func warpTempFileReadSeekCloser(file *os.File) io.ReadSeekCloser {
 }
 
 func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chunk *DHashChunk, err error) {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "Get from %s", ni.Addr())
+	defer func(err *error) {
+		if *err != nil {
+			*err = errors.New("remote get chunk: " + (*err).Error())
+		}
+	}(&err)
+
 	client, close, err := c.dialClient(ctx, ni)
 	if err != nil {
 		return nil, err
@@ -72,25 +84,61 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 	if err != nil {
 		return nil, err
 	}
-	chunk.HashChunk.SetInfo(hashchunk.NewInfo(PBChunkInfoToHashChunkInfo(resp.ChunkInfo), nil))
 
+	chunk.HashChunk.SetInfo(hashchunk.NewInfo(PBChunkInfoToHashChunkInfo(resp.ChunkInfo), nil))
 	// 如果chunk大小超过默认buffer大小，写入临时文件中
-	if resp.ChunkInfo.Size > c.BufferSize {
+	if resp.ChunkInfo.Size > c.RPCBufferSize {
 		chunkTempFile, err := os.CreateTemp(os.TempDir(), "remote-chunk-")
 		if err != nil {
 			return nil, err
 		}
 		//不要defer关闭，接受完数据就seek到文件头，然后返回
-		defer func() {
+		defer func(err *error) {
 			// 如果err不为nil，说明在接受chunk数据时出现了错误，需要删除临时文件
-			if err != nil {
+			if *err != nil {
 				if cerr := chunkTempFile.Close(); cerr != nil {
-					err = cerr
+					*err = cerr
 				}
 				os.Remove(chunkTempFile.Name())
 			}
-		}()
+		}(&err)
 
+		receivedBuffer := 0
+
+		// 接受chunk数据
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = chunkTempFile.Write(resp.GetData())
+			if err != nil {
+				return nil, err
+			}
+			receivedBuffer += len(resp.Data)
+		}
+
+		if err = stream.CloseSend(); err != nil {
+			return nil, err
+		}
+
+		if _, err = chunkTempFile.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+
+		if receivedBuffer != int(resp.ChunkInfo.Size) {
+			return nil, fmt.Errorf("received size not match: %d != expected %d", receivedBuffer, resp.ChunkInfo.Size)
+		}
+
+		chunk.ReadSeekCloser = warpTempFileReadSeekCloser(chunkTempFile)
+
+		return chunk, nil
+	} else {
+		chunkBuffer := c.pool.Get()
 		// 接受chunk数据
 		for {
 			resp, err := stream.Recv()
@@ -105,50 +153,31 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 			if n == 0 {
 				continue
 			}
-			_, err = chunkTempFile.Write(resp.GetData())
+			_, err = chunkBuffer.Write(resp.GetData())
+			if err == chunkpool.FullBuffer {
+				break
+			}
 			if err != nil {
 				return nil, err
 			}
 		}
-		if _, err = chunkTempFile.Seek(0, io.SeekStart); err != nil {
+
+		if err = stream.CloseSend(); err != nil {
 			return nil, err
 		}
 
-		chunk.ReadCloser = warpTempFileReadSeekCloser(chunkTempFile)
-
+		chunk.ReadSeekCloser = chunkBuffer.ReadCloser(c.pool)
 		return chunk, nil
-
-	} //if end
-
-	chunkBuffer := c.pool.Get()
-	// 接受chunk数据
-	for {
-		resp, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		n := len(resp.Data)
-		if n == 0 {
-			continue
-		}
-		_, err = chunkBuffer.Write(resp.GetData())
-		if err == chunkpool.FullBuffer {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
 	}
-	chunk.ReadCloser = chunkBuffer.ReadCloser(c.pool)
-	return chunk, nil
 }
 
-func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chunkName string, reader io.Reader) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "Put to %s", ni.Addr())
+func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, size int64, chunkName string, reader io.Reader) (err error) {
+	defer func(err *error) {
+		if *err != nil {
+			*err = errors.New("remote put chunk: " + (*err).Error())
+		}
+	}(&err)
+
 	client, close, err := c.dialClient(ctx, ni)
 	if err != nil {
 		return err
@@ -165,12 +194,17 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chun
 		Key: key,
 	}
 	content.ChunkName = chunkName
+	content.ChunkSize = size
 
 	if err = stream.Send(content); err != nil {
 		return err
 	}
 
-	buffer := make([]byte, c.BufferSize)
+	content = new(fspb.PutRequest)
+
+	transfered := 0
+
+	buffer := make([]byte, c.RPCBufferSize)
 	var buffered int64 = 0
 	for {
 		n, err := reader.Read(buffer[buffered:])
@@ -181,16 +215,15 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chun
 			return err
 		}
 		buffered += int64(n)
-		if buffered < c.BufferSize {
+		if buffered < c.RPCBufferSize {
 			continue
 		}
 		content.Data = buffer[:buffered]
 		if err = stream.Send(content); err != nil {
 			return err
 		}
-
+		transfered += int(buffered)
 		buffered = 0
-		clear(buffer)
 	}
 
 	if buffered != 0 {
@@ -198,30 +231,47 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, chun
 		if err = stream.Send(content); err != nil {
 			return err
 		}
+		transfered += int(buffered)
 	}
 
-	remoteErr, err := stream.CloseAndRecv()
+	if transfered != int(size) {
+		return errors.New("transfered size not match")
+	}
+
+	println("transfered size: ", transfered)
+
+	resp, err := stream.CloseAndRecv()
 	if err != nil {
 		return err
 	}
-	if remoteErr.GetErr() != "" {
-		return errors.New(remoteErr.GetErr())
+
+	if resp.GetErr() != "" {
+		return errors.New(resp.GetErr())
 	}
 
 	return nil
 }
 
-func (c *rpcHashClient) delete(ctx context.Context, ni *node.Node, key []byte) error {
-	dlogger.Dlog.LogDebugf("[RPC Client]", "Delete file in %s", ni.Addr())
+func (c *rpcHashClient) delete(ctx context.Context, ni *node.Node, key []byte) (err error) {
+	defer func(err *error) {
+		if *err != nil {
+			*err = errors.New("remote delete chunk: " + (*err).Error())
+		}
+	}(&err)
 	client, close, err := c.dialClient(ctx, ni)
 	if err != nil {
 		return err
 	}
 	defer close()
 
-	_, err = client.Delete(ctx, &fspb.Key{Key: key})
+	resp, err := client.Delete(ctx, &fspb.Key{Key: key})
 	if err != nil {
 		return err
 	}
+
+	if resp.GetErr() != "" {
+		return err
+	}
+
 	return nil
 }

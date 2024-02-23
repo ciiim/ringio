@@ -69,7 +69,7 @@ func (r *rpcServer) PutMetadata(ctx context.Context, req *fspb.PutMetadataReques
 }
 
 func (r *rpcServer) DeleteMetadata(ctx context.Context, req *fspb.TreeFileSystemBasicRequest) (*fspb.Error, error) {
-	err := r.tfs.DeleteMetadata(req.Space, req.Base, req.Name, req.Hash)
+	err := r.tfs.DeleteMetadata(req.GetSpace(), req.GetBase(), req.GetName())
 	if err != nil {
 		return &fspb.Error{Err: err.Error()}, nil
 	}

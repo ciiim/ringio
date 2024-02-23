@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	META_FILE_SUFFIX = ".meta"
+	META_FILE_SUFFIX = ".meta.json"
 )
 
 type Metadata struct {

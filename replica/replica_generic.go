@@ -133,7 +133,7 @@ func (r *ReplicaServiceG[T]) PutReplica(key []byte, local io.ReadSeeker) (*Repli
 	return localInfo, nil
 }
 
-func (r *ReplicaServiceG[T]) GetReplica(key []byte) (reader io.ReadCloser, info *ReplicaObjectInfoG[T], err error) {
+func (r *ReplicaServiceG[T]) GetReplica(key []byte) (reader io.ReadSeekCloser, info *ReplicaObjectInfoG[T], err error) {
 	if r.getReplica == nil {
 		return nil, nil, ErrNoFunction
 	}
@@ -181,7 +181,7 @@ func (r *ReplicaServiceG[T]) GetReplica(key []byte) (reader io.ReadCloser, info 
 	最终
 	1(主) 2(副) 3(副) 4 5 6 ...
 */
-func (r *ReplicaServiceG[T]) RecoverReplica(key []byte) (reader io.ReadCloser, info *ReplicaObjectInfoG[T], err error) {
+func (r *ReplicaServiceG[T]) RecoverReplica(key []byte) (reader io.ReadSeekCloser, info *ReplicaObjectInfoG[T], err error) {
 	if r.getReplica == nil {
 		return nil, nil, ErrNoFunction
 	}

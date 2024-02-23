@@ -3,17 +3,16 @@ package ringapi
 import (
 	"crypto/md5"
 	"log/slog"
-	"os"
 
 	"github.com/ciiim/cloudborad/chunkpool"
-	"github.com/ciiim/cloudborad/node"
 	"github.com/ciiim/cloudborad/ringio"
+	"github.com/urfave/cli/v2"
 )
 
 var Ring *RingAPI
 
 type RingAPI struct {
-	ring      *ringio.Ring
+	*ringio.Ring
 	chunkPool *chunkpool.ChunkPool
 }
 
@@ -23,22 +22,27 @@ func md5Hash(data []byte) []byte {
 }
 
 func init() {
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = ringio.DefaultName
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	nodeService := node.NewNodeService(hostname, ringio.DefaultPort, ringio.DefualtReplica)
-	nodesro := nodeService.NodeServiceRO()
-	tfs := ringio.NewDTreeFileSystem("./ring/fs", nodesro)
-	hcs := ringio.NewDHCS("./ring/storage", -1, ringio.DefaultChunkSize, nodesro, md5Hash, nil)
 
-	Ring = NewRingAPI(ringio.NewRing(hostname, logger, nodeService, tfs, hcs))
+}
+
+func InitRingAPI(flags *cli.Context) {
+	config := &ringio.RingConfig{
+		Name:         flags.String("hostname"),
+		Port:         flags.Int("port"),
+		Replica:      flags.Int("replica"),
+		ChunkMaxSize: ringio.DefaultChunkSize,
+		HashFn:       md5Hash,
+		RootPath:     flags.String("root"),
+		LogLevel:     slog.LevelInfo,
+	}
+
+	Ring = NewRingAPI(ringio.NewRing(config))
+
 }
 
 func NewRingAPI(ring *ringio.Ring) *RingAPI {
 	return &RingAPI{
-		ring:      ring,
-		chunkPool: chunkpool.NewChunkPool(ring.StorageSystem.Config().ChunkMaxSize()),
+		Ring:      ring,
+		chunkPool: chunkpool.NewChunkPool(ring.StorageSystem.Config().ChunkMaxSize),
 	}
 }

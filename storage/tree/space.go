@@ -1,13 +1,11 @@
 package tree
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/ciiim/cloudborad/storage/types"
 )
@@ -22,9 +20,6 @@ var (
 
 type Space struct {
 	root string
-
-	spaceMu sync.Mutex
-
 	// /treeFS.rootPath/spaceKey
 	spaceKey string
 	base     string
@@ -39,19 +34,24 @@ func (s *Space) storeMetaData(base, fileName string, metadata []byte) (err error
 }
 
 func (s *Space) getMetadata(base, fileName string) ([]byte, error) {
+
+	fileName += META_FILE_SUFFIX
+
 	return s.i_getMetadata(base, fileName)
 }
 
 func (s *Space) deleteMetaData(base, fileName string) error {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
+
+	fileName += META_FILE_SUFFIX
+
 	size, err := s.GetSize(base, fileName)
 	if err != nil {
 		return err
 	}
-	if s.occupy < size {
-		return errors.New("occupy < size")
-	}
+	//TODO: check size
+	// if s.occupy < size {
+	// 	return errors.New("occupy < size")
+	// }
 
 	s.occupy -= size
 
@@ -59,34 +59,28 @@ func (s *Space) deleteMetaData(base, fileName string) error {
 }
 
 func (s *Space) makeDir(base, fileName string) error {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
+
 	return os.Mkdir(s.getFullPath(base, fileName), 0755)
 }
 
 func (s *Space) renameDir(base, fileName, newName string) error {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
+
 	return os.Rename(s.getFullPath(base, fileName), s.getFullPath(base, newName))
 }
 
 func (s *Space) deleteDir(base, fileName string) error {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
+
 	return os.RemoveAll(s.getFullPath(base, fileName))
 }
 
 func (s *Space) getDir(base, fileName string) (string, []fs.DirEntry, error) {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
+
 	fullpath := s.getFullPath(base, fileName)
 	dirs, err := os.ReadDir(fullpath)
 
 	return fullpath, dirs, err
 }
 func (s *Space) i_storeMetadata(base, fileName string, metadata []byte, flag int) error {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
 
 	// 加元数据后缀
 	fileName = fileName + META_FILE_SUFFIX
@@ -110,8 +104,6 @@ func (s *Space) i_storeMetadata(base, fileName string, metadata []byte, flag int
 }
 
 func (s *Space) i_getMetadata(base, fileName string) ([]byte, error) {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
 
 	file, err := os.Open(s.getFullPath(base, fileName))
 	if err != nil {
@@ -130,8 +122,6 @@ func (s *Space) i_getMetadata(base, fileName string) ([]byte, error) {
 }
 
 func (s *Space) metadataExist(base, fileName string) bool {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
 
 	_, err := os.Stat(s.getFullPath(base, fileName))
 	return !os.IsNotExist(err)
@@ -147,22 +137,17 @@ func (s *Space) save() error {
 }
 
 func (s *Space) Close() error {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
+
 	return s.save()
 }
 
 func (s *Space) Occupy() types.Byte {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
 
 	return s.occupy
 }
 
 // Get "this" size, "this" can be a file or a dir
 func (s *Space) GetSize(base, target string) (types.Byte, error) {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
 
 	var size types.Byte
 	err := filepath.WalkDir(s.getFullPath(base, target), func(path string, d fs.DirEntry, err error) error {
@@ -181,8 +166,6 @@ func (s *Space) GetSize(base, target string) (types.Byte, error) {
 }
 
 func (s *Space) Cap() int64 {
-	s.spaceMu.Lock()
-	defer s.spaceMu.Unlock()
 
 	return s.capacity
 }

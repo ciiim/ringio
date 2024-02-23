@@ -28,7 +28,7 @@ func NewNode(nodeAddr string, uniqueNodeName string) *Node {
 }
 
 // return false if other is nil
-func (n *Node) Equal(other *Node) bool {
+func (n Node) Equal(other *Node) bool {
 	if other == nil {
 		return false
 	}
@@ -39,22 +39,22 @@ func (n *Node) Compare(other chash.CHashItem) bool {
 	return n.ID() == other.ID()
 }
 
-func (n *Node) Name() string {
+func (n Node) Name() string {
 	return n.nodeName
 }
 
-func (n *Node) Addr() string {
+func (n Node) Addr() string {
 	return net.JoinHostPort(n.nodeIP, n.nodePort)
 }
 
-func (n *Node) IP() string {
+func (n Node) IP() string {
 	return n.nodeIP
 }
 
-func (n *Node) Port() string {
+func (n Node) Port() string {
 	return n.nodePort
 }
 
-func (n *Node) ID() string {
+func (n Node) ID() string {
 	return n.nodeID
 }

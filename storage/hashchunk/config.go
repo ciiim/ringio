@@ -1,14 +1,12 @@
 package hashchunk
 
 type Config struct {
-	chunkMaxSize int64
-	hashFn       Hash
-}
+	RootPath          string
+	Capacity          int64
+	ChunkMaxSize      int64
+	HashFn            Hash
+	CalcStoragePathFn CalcChunkStoragePathFn
 
-func (c *Config) ChunkMaxSize() int64 {
-	return c.chunkMaxSize
-}
-
-func (c *Config) HashFn() Hash {
-	return c.hashFn
+	// 是否启用副本
+	EnableReplica bool
 }

@@ -15,7 +15,8 @@ message Key {
 message PutRequest {
     Key key = 1;
     string chunk_name = 2;
-    bytes data = 3;
+    int64 chunk_size = 3;
+    bytes data = 4;
 }
 
 message GetResponse {

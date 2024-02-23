@@ -6,15 +6,15 @@ import (
 )
 
 type IHashChunkSystem interface {
-	CreateChunk(key []byte, name string, extra *ExtraInfo) (io.WriteCloser, error)
-	StoreBytes(key []byte, name string, value []byte, extra *ExtraInfo) error
-	StoreReader(key []byte, name string, v io.Reader, extra *ExtraInfo) error
+	CreateChunk(key []byte, name string, size int64, extra *ExtraInfo) (io.WriteCloser, error)
+	StoreBytes(key []byte, name string, size int64, value []byte, extra *ExtraInfo) error
+	StoreReader(key []byte, name string, size int64, v io.Reader, extra *ExtraInfo) error
 
 	Get(key []byte) (*HashChunk, error)
 	Delete(key []byte) error
 
 	GetInfo(key []byte) (*Info, error)
-	UpdateInfo(key []byte, info *Info) error
+	UpdateInfo(key []byte, updateFn func(info *Info)) error
 
 	Cap() int64
 	Occupied(unit ...string) float64
@@ -22,7 +22,7 @@ type IHashChunkSystem interface {
 }
 
 type IHashChunk interface {
-	io.ReadCloser
+	io.ReadSeekCloser
 	Info() *Info
 }
 

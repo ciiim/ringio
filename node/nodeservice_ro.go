@@ -9,12 +9,14 @@ type NodeServiceRO struct {
 }
 
 func (ns *NodeService) NodeServiceRO() *NodeServiceRO {
-	if ns.ro == nil {
-		ns.ro = &NodeServiceRO{
-			cMap: ns.cMap,
-			self: ns.self,
+	ns.onceRO.Do(func() {
+		if ns.ro == nil {
+			ns.ro = &NodeServiceRO{
+				cMap: ns.cMap,
+				self: ns.self,
+			}
 		}
-	}
+	})
 	return ns.ro
 }
 

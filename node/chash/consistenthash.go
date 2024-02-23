@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -47,6 +48,7 @@ func (i *innerItem) IsVirtual() bool {
 
 // Consistent hash Map
 type ConsistentHash struct {
+	count int64
 
 	// hashFn hash函数
 	hashFn ConsistentHashFn
@@ -88,6 +90,10 @@ func NewConsistentHash(replicas int, fn ConsistentHashFn) *ConsistentHash {
 
 }
 
+func (c *ConsistentHash) Len() int64 {
+	return atomic.LoadInt64(&c.count)
+}
+
 // []byte READ ONLY
 func string2Bytes(s string) (readOnly []byte) {
 	sd := unsafe.StringData(s)
@@ -124,6 +130,8 @@ func (c *ConsistentHash) Add(item CHashItem) {
 		c.hashRing = append(c.hashRing, hashid)
 	}
 	slices.Sort[[]uint64](c.hashRing)
+
+	atomic.AddInt64(&c.count, 1)
 }
 
 func (c *ConsistentHash) Del(item CHashItem) {
@@ -169,6 +177,8 @@ func (c *ConsistentHash) Del(item CHashItem) {
 		}
 		c.hashRing = append(c.hashRing[:i], c.hashRing[i+1:]...)
 	}
+
+	atomic.AddInt64(&c.count, -1)
 }
 
 func (c *ConsistentHash) Get(key []byte) CHashItem {
@@ -180,12 +190,12 @@ func (c *ConsistentHash) Get(key []byte) CHashItem {
 		return nil
 	}
 	hash := c.hashFn(key)
+
 	index := sort.Search(len(c.hashRing), func(i int) bool { return c.hashRing[i] >= hash })
 	item := c.hashMap[c.hashRing[index%len(c.hashRing)]]
 	realItem, ok := item.(*innerItem)
 	if ok {
 		return realItem.real
-
 	}
 	return nil
 }

@@ -10,10 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/ciiim/cloudborad/database"
-	dlogger "github.com/ciiim/cloudborad/debug"
 	"github.com/ciiim/cloudborad/storage/types"
 
 	"github.com/syndtr/goleveldb/leveldb"
@@ -24,8 +22,6 @@ var (
 )
 
 type HashChunkSystem struct {
-	rootPath string //相对路径 relative path
-
 	config *Config
 
 	capacity *types.SafeInt64
@@ -35,10 +31,6 @@ type HashChunkSystem struct {
 
 	levelDB *leveldb.DB
 
-	calcChunkStoragePathFn CalcChunkStoragePathFn
-
-	HashFn Hash
-
 	rwMutex sync.RWMutex
 }
 
@@ -47,67 +39,59 @@ type CalcChunkStoragePathFn = func(chunkStat *HashChunkInfo) string
 type Hash func([]byte) []byte
 
 // default calculate store path function
-// format: year/month/day/chunkhash[0:3]/chunkhash[3:6]
+// format: chunkhash[0:3]/chunkhash[3:6]/chunkhash[6:9]
 var DefaultCalcStorePathFn = func(hci *HashChunkInfo) string {
-	timePath := time.Time.Format(time.Now(), "2006/01/02")
-	path := fmt.Sprintf("%s/%x/%x", timePath, hci.ChunkHash[0:3], hci.ChunkHash[3:6])
+	path := fmt.Sprintf("%x/%x/%x", hci.ChunkHash[0:3], hci.ChunkHash[3:6], hci.ChunkHash[3:9])
 	return path
 }
 
 var _ IHashChunkSystem = (*HashChunkSystem)(nil)
 var _ IHashChunkInfo = (*HashChunkInfo)(nil)
 
-func NewHashChunkSystem(rootPath string, capacity int64, chunkSize int64, hashFn Hash, calcStoragePathFn CalcChunkStoragePathFn) *HashChunkSystem {
-	if err := os.MkdirAll(rootPath, os.ModePerm); err != nil {
+func NewHashChunkSystem(config *Config) *HashChunkSystem {
+	if err := os.MkdirAll(config.RootPath, os.ModePerm); err != nil {
 		panic("mkdir error:" + err.Error())
 	}
 	hashDBName := "chunkinfo"
-	db, err := database.NewLevelDB(filepath.Join(rootPath + "/" + hashDBName))
+	db, err := database.NewLevelDB(filepath.Join(config.RootPath + "/" + hashDBName))
 	if err != nil {
 		panic("leveldb init error:" + err.Error())
 	}
 
 	hcs := &HashChunkSystem{
-		rootPath:               rootPath,
-		capacity:               types.NewSafeInt64(),
-		occupied:               types.NewSafeInt64(),
-		chunkStatDBName:        hashDBName,
-		levelDB:                db,
-		calcChunkStoragePathFn: calcStoragePathFn,
-
-		config: &Config{
-			chunkMaxSize: chunkSize,
-			hashFn:       hashFn,
-		},
+		capacity:        types.NewSafeInt64(),
+		occupied:        types.NewSafeInt64(),
+		chunkStatDBName: hashDBName,
+		levelDB:         db,
+		config:          config,
 	}
-	if calcStoragePathFn == nil {
-		dlogger.Dlog.LogDebugf("[BFS]", "Use Default Calculate Function.")
-		hcs.calcChunkStoragePathFn = DefaultCalcStorePathFn
+	if config.CalcStoragePathFn == nil {
+		hcs.config.CalcStoragePathFn = DefaultCalcStorePathFn
 	}
 
 	cap, ouppy, err := hcs.getCapAndOccupied()
 
 	if err != nil {
-		log.Println("New HCS at", rootPath)
-		_ = hcs.storeCapAndOccupied(capacity, 0)
+		log.Println("New HCS at", config.RootPath)
+		_ = hcs.storeCapAndOccupied(config.Capacity, 0)
 		return hcs
 	}
-	log.Printf("Detect exist HCS at %s\n", rootPath)
+	log.Printf("Detect exist HCS at %s\n", config.RootPath)
 
 	hcs.capacity.Store(cap)
 	hcs.updateOccupied(ouppy)
 
-	if capacity < cap {
+	if config.Capacity < cap {
 		log.Println("[BFS] capacity is less than exist HCS, use exist HCS's capacity.")
 	}
-	if capacity > cap {
+	if config.Capacity > cap {
 		log.Println("[BFS] capacity is more than exist HCS, use new capacity.")
-		hcs.capacity.Store(capacity)
+		hcs.capacity.Store(config.Capacity)
 	}
 	return hcs
 }
 
-func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, extra *ExtraInfo) (io.WriteCloser, error) {
+func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, size int64, extra *ExtraInfo) (io.WriteCloser, error) {
 	if len(key) == 0 {
 		return nil, ErrEmptyKey
 	}
@@ -122,12 +106,12 @@ func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, extra *Ext
 	if err == nil {
 		return nil, fmt.Errorf("chunk is exist")
 	}
-	if err != nil && err != leveldb.ErrNotFound {
+	if err != nil && err != ErrChunkInfoNotFound {
 		return nil, err
 	}
 
-	hci := NewChunkInfo(chunkName, key, 0)
-	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
+	hci := NewChunkInfo(chunkName, key, size)
+	hci.SetPath(filepath.Join(hcs.config.RootPath, hcs.config.CalcStoragePathFn(hci)))
 	info := NewInfo(hci, extra)
 	if err := os.MkdirAll(hci.ChunkPath, os.ModePerm); err != nil {
 		return nil, err
@@ -138,7 +122,7 @@ func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, extra *Ext
 	return hcs.createChunkWriter(hci)
 }
 
-func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byte, extra *ExtraInfo) error {
+func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, size int64, value []byte, extra *ExtraInfo) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
@@ -156,19 +140,23 @@ func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byt
 	if err == nil {
 		return nil
 	}
-	if err != nil && err != leveldb.ErrNotFound {
+	if err != nil && err != ErrChunkInfoNotFound {
 		return err
 	}
 
 	valueLength := int64(len(value))
+
+	if valueLength != size {
+		return fmt.Errorf("value length is not equal to size")
+	}
 
 	//check capacity
 	if err := hcs.CheckCapacity(valueLength); err != nil {
 		return err
 	}
 
-	hci := NewChunkInfo(chunkName, key, valueLength)
-	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
+	hci := NewChunkInfo(chunkName, key, size)
+	hci.SetPath(filepath.Join(hcs.config.RootPath, hcs.config.CalcStoragePathFn(hci)))
 
 	info := NewInfo(hci, extra)
 	//make dir
@@ -188,7 +176,7 @@ func (hcs *HashChunkSystem) StoreBytes(key []byte, chunkName string, value []byt
 	return nil
 }
 
-func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reader, extra *ExtraInfo) error {
+func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, size int64, v io.Reader, extra *ExtraInfo) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
@@ -207,13 +195,13 @@ func (hcs *HashChunkSystem) StoreReader(key []byte, chunkName string, v io.Reade
 		return nil
 	}
 
-	if err != nil && err != leveldb.ErrNotFound {
+	if err != nil && err != ErrChunkInfoNotFound {
 		return err
 	}
 
 	//check capacity
-	hci := NewChunkInfo(chunkName, key, 0)
-	hci.SetPath(filepath.Join(hcs.rootPath, hcs.calcChunkStoragePathFn(hci)))
+	hci := NewChunkInfo(chunkName, key, size)
+	hci.SetPath(filepath.Join(hcs.config.RootPath, hcs.config.CalcStoragePathFn(hci)))
 	info := NewInfo(hci, extra)
 
 	if err := os.MkdirAll(hci.ChunkPath, os.ModePerm); err != nil {
@@ -246,8 +234,8 @@ func (hcs *HashChunkSystem) Get(key []byte) (*HashChunk, error) {
 	}
 	file, err := hcs.getChunk(info)
 	return &HashChunk{
-		ReadCloser: file,
-		info:       info,
+		ReadSeekCloser: file,
+		info:           info,
 	}, err
 }
 
@@ -275,9 +263,10 @@ func (hcs *HashChunkSystem) Delete(key []byte) error {
 	if err != nil {
 		return err
 	}
-	if hcs.occupied.Load()-info.ChunkInfo.ChunkSize < 0 {
-		return fmt.Errorf("[Delete Chunk Error] Occupied is 0")
-	}
+	// TODO: check occupied
+	// if hcs.occupied.Load()-info.ChunkInfo.ChunkSize < 0 {
+	// 	return fmt.Errorf("[Delete Chunk Error] Occupied is 0")
+	// }
 	if err := hcs.deleteChunkStat(key); err != nil {
 		return err
 	}
@@ -300,13 +289,20 @@ func (hcs *HashChunkSystem) GetInfo(key []byte) (*Info, error) {
 	return hcs.getInfo(key)
 }
 
-func (hcs *HashChunkSystem) UpdateInfo(key []byte, info *Info) error {
+func (hcs *HashChunkSystem) UpdateInfo(key []byte, updateInfoFn func(info *Info)) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
 
 	hcs.rwMutex.Lock()
 	defer hcs.rwMutex.Unlock()
+
+	info, err := hcs.getInfo(key)
+	if err != nil {
+		return err
+	}
+
+	updateInfoFn(info)
 
 	return hcs.storeInfo(key, info)
 }
@@ -344,7 +340,7 @@ func (hcs *HashChunkSystem) Occupied(unit ...string) float64 {
 }
 
 func (hcs *HashChunkSystem) createChunkWriter(hcStat *HashChunkInfo) (io.WriteCloser, error) {
-	if hcs.calcChunkStoragePathFn == nil {
+	if hcs.config.CalcStoragePathFn == nil {
 		return nil, fmt.Errorf("CalcChunkStoragePathFn is nil")
 	}
 	chunkFile, err := os.Create(filepath.Join(hcStat.ChunkPath, hcStat.ChunkName))
@@ -356,20 +352,18 @@ func (hcs *HashChunkSystem) createChunkWriter(hcStat *HashChunkInfo) (io.WriteCl
 }
 
 func (hcs *HashChunkSystem) storeChunkBytes(hcStat *HashChunkInfo, value []byte) error {
-	if hcs.calcChunkStoragePathFn == nil {
-		return fmt.Errorf("CalcChunkStoragePathFn is nil")
-	}
 	file, err := os.Create(filepath.Join(hcStat.ChunkPath, hcStat.ChunkName))
 	if err != nil {
 		return fmt.Errorf("open file %s error: %s", hcStat.ChunkPath+"/"+hcStat.ChunkName, err)
 	}
 	defer file.Close()
+
 	_, err = file.Write(value)
 	return err
 }
 
 func (hcs *HashChunkSystem) storeChunkReader(key *HashChunkInfo, reader io.Reader) error {
-	if hcs.calcChunkStoragePathFn == nil {
+	if hcs.config.CalcStoragePathFn == nil {
 		return fmt.Errorf("CalcChunkStoragePathFn is nil")
 	}
 	file, err := os.Create(key.ChunkPath + "/" + key.ChunkName)
@@ -380,14 +374,12 @@ func (hcs *HashChunkSystem) storeChunkReader(key *HashChunkInfo, reader io.Reade
 	return err
 }
 
-func (hcs *HashChunkSystem) getChunk(info *Info) (io.ReadCloser, error) {
-	path := info.ChunkInfo.ChunkPath
-	if path == "" {
-		return nil, errors.New("path is empty")
-	}
-
-	file, err := os.Open(filepath.Join(path, info.ChunkInfo.ChunkName))
+func (hcs *HashChunkSystem) getChunk(info *Info) (io.ReadSeekCloser, error) {
+	file, err := os.Open(filepath.Join(info.ChunkInfo.ChunkPath, info.ChunkInfo.ChunkName))
 	if err != nil {
+		if err == os.ErrNotExist {
+			return nil, ErrFileNotFound
+		}
 		return nil, err
 	}
 	return file, nil
@@ -402,6 +394,9 @@ func (hcs *HashChunkSystem) deleteChunk(info *Info) error {
 func (hcs *HashChunkSystem) getInfo(hashSum []byte) (*Info, error) {
 	infoBytes, err := hcs.levelDB.Get(hashSum, nil)
 	if err != nil {
+		if err == leveldb.ErrNotFound {
+			return nil, ErrChunkInfoNotFound
+		}
 		return nil, err
 	}
 	var info Info
