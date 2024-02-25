@@ -3,22 +3,30 @@ package ringio
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 
 	"github.com/ciiim/cloudborad/chunkpool"
 	"github.com/ciiim/cloudborad/node"
 	"github.com/ciiim/cloudborad/replica"
 	"github.com/ciiim/cloudborad/storage/hashchunk"
+	"github.com/ciiim/cloudborad/util"
 )
 
 var (
 	ErrStoreWhenRecovering  = errors.New("store when recovering")
 	ErrDeleteWhenRecovering = errors.New("delete when recovering")
 )
+
+type HashChunkReplicaInfo = replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo]
+
+type DHCSConfig struct {
+	HCSConfig     *hashchunk.Config
+	EnableReplica bool
+}
 
 // distribute file system
 type DHashChunkSystem struct {
@@ -33,6 +41,8 @@ type DHashChunkSystem struct {
 	remote *rpcHashClient
 	ns     *node.NodeServiceRO
 
+	config *DHCSConfig
+
 	l *slog.Logger
 }
 
@@ -46,46 +56,56 @@ func (d *DHashChunkSystem) PickNode(key []byte) *node.Node {
 	return d.ns.Pick(key)
 }
 
-func NewDHCS(config *hashchunk.Config, ns *node.NodeServiceRO, logger *slog.Logger) *DHashChunkSystem {
+func NewDHCS(config *DHCSConfig, ns *node.NodeServiceRO, logger *slog.Logger) *DHashChunkSystem {
 	d := &DHashChunkSystem{
-		localSys: hashchunk.NewHashChunkSystem(config),
+		localSys: hashchunk.NewHashChunkSystem(config.HCSConfig),
 
-		pool: chunkpool.NewChunkPool(config.ChunkMaxSize),
-
-		replicaService: replica.NewG[*hashchunk.HashChunkInfo](3, ns),
+		pool: chunkpool.NewChunkPool(config.HCSConfig.ChunkMaxSize),
 
 		ns: ns,
+
+		config: config,
 
 		l: logger,
 	}
 
+	d.remote = newRPCHashClient(d.pool)
+
 	if config.EnableReplica {
+		d.replicaService = replica.NewG[*hashchunk.HashChunkInfo](3, ns)
+
 		d.recover.Finalize = func(key []byte, finalCount int64) {
-			if finalCount <= 0 {
+			info, err := d.local().GetInfo(key)
+			if err != nil {
+				return
+			}
+			if info.ChunkInfo.ChunkCount+finalCount <= 0 {
 				_ = d.Delete(key)
 			} else {
-				_ = d.localSys.UpdateInfo(
+				_ = d.local().UpdateInfo(
 					key,
 					func(info *hashchunk.Info) {
-						info.ChunkInfo.ChunkCount = finalCount
+						info.ChunkInfo.ChunkCount += finalCount
 					},
 				)
 			}
 		}
+		d.setReplicaFunctions()
+		d.l.Info("Replica enabled")
 	}
 
-	d.remote = newRPCHashClient(d.pool)
-
-	d.setReplicaFunctions()
 	return d
 }
 
 func (d *DHashChunkSystem) Get(key []byte) (chunk IDHashChunk, err error) {
-	defer func() {
-		if err != nil {
-			d.l.Error("Get chunk", "error", err)
+	defer func(err *error) {
+		if panic := recover(); panic != nil {
+			d.l.Error("Get chunk", "panic", panic)
 		}
-	}()
+		if *err != nil {
+			d.l.Error("Get chunk", "error", *err)
+		}
+	}(&err)
 
 	ni := d.PickNode(key)
 	if ni == nil {
@@ -93,14 +113,7 @@ func (d *DHashChunkSystem) Get(key []byte) (chunk IDHashChunk, err error) {
 	}
 	// get from local
 	if ni.Equal(d.ns.Self()) {
-		df, err := d.getLocally(key)
-		if errors.Is(err, hashchunk.ErrFileNotFound) {
-			return d.RecoverChunk(key)
-		} else if errors.Is(err, hashchunk.ErrChunkInfoNotFound) {
-			//TODO:恢复chunk信息
-		} else {
-			return df, err
-		}
+		return d.GetLocally(key)
 	}
 
 	// get from remote
@@ -114,11 +127,11 @@ func (d *DHashChunkSystem) Get(key []byte) (chunk IDHashChunk, err error) {
 
 func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, size int64, v []byte, extra *hashchunk.ExtraInfo) (err error) {
 
-	defer func() {
+	defer func(err *error) {
 		if err != nil {
 			d.l.Error("Store bytes", "error", err)
 		}
-	}()
+	}(&err)
 
 	ni := d.PickNode(key)
 	if ni == nil {
@@ -126,7 +139,8 @@ func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, size int64, v
 	}
 	// store locally
 	if ni.Equal(d.ns.Self()) {
-		return d.storeBytesLocally(key, filename, size, v, extra)
+		err := d.StoreBytesLocally(key, filename, size, v, extra)
+		return err
 	}
 
 	reader := bytes.NewReader(v)
@@ -139,11 +153,11 @@ func (d *DHashChunkSystem) StoreBytes(key []byte, filename string, size int64, v
 
 func (d *DHashChunkSystem) StoreReader(key []byte, filename string, size int64, reader io.Reader, extra *hashchunk.ExtraInfo) (err error) {
 
-	defer func() {
-		if err != nil {
+	defer func(err *error) {
+		if *err != nil {
 			d.l.Error("Store reader", "error", err)
 		}
-	}()
+	}(&err)
 
 	ni := d.PickNode(key)
 	if ni == nil {
@@ -151,11 +165,12 @@ func (d *DHashChunkSystem) StoreReader(key []byte, filename string, size int64, 
 	}
 	// store locally
 	if ni.Equal(d.ns.Self()) {
-		return d.storeReaderLocally(key, filename, size, reader, extra)
+		err := d.StoreReaderLocally(key, filename, size, reader, extra)
+		return err
 	}
 
 	// store remotely
-	log.Printf("[HashDFileSystem]Request redirect to %s.", ni.Addr())
+	d.l.Info("Store reader", "remote", ni.Addr())
 	ctx, cancel := context.WithTimeout(context.Background(), _RPC_TIMEOUT)
 	defer cancel()
 	return d.remote.put(ctx, ni, key, size, filename, reader)
@@ -163,11 +178,11 @@ func (d *DHashChunkSystem) StoreReader(key []byte, filename string, size int64, 
 
 func (d *DHashChunkSystem) Delete(key []byte) (err error) {
 
-	defer func() {
-		if err != nil {
+	defer func(err *error) {
+		if *err != nil {
 			d.l.Error("Delete", "error", err)
 		}
-	}()
+	}(&err)
 
 	ni := d.PickNode(key)
 
@@ -178,7 +193,8 @@ func (d *DHashChunkSystem) Delete(key []byte) (err error) {
 
 	// delete locally
 	if ni.Equal(d.ns.Self()) {
-		return d.deleteLocally(key)
+		err := d.DeleteLocally(key)
+		return err
 	}
 
 	// delete remotely
@@ -187,14 +203,20 @@ func (d *DHashChunkSystem) Delete(key []byte) (err error) {
 	return d.remote.delete(ctx, ni, key)
 }
 
-func (d *DHashChunkSystem) getLocally(key []byte) (*DHashChunk, error) {
+func (d *DHashChunkSystem) GetLocally(key []byte) (IDHashChunk, error) {
 	chunk, err := d.local().Get(key)
+	fmt.Printf("GetLocally %x err: %w\n", key, err)
+	if errors.Is(err, hashchunk.ErrChunkNotFound) {
+		return d.RecoverChunk(key)
+	} else if errors.Is(err, hashchunk.ErrChunkInfoNotFound) {
+		//TODO:恢复chunk信息
+	}
 	return &DHashChunk{
 		HashChunk: chunk,
 	}, err
 }
 
-func (d *DHashChunkSystem) storeBytesLocally(key []byte, filename string, size int64, v []byte, extra *hashchunk.ExtraInfo) error {
+func (d *DHashChunkSystem) StoreBytesLocally(key []byte, filename string, size int64, v []byte, extra *hashchunk.ExtraInfo) error {
 
 	if d.recover.isRecovering(key) {
 		// 假如isRecovering为真，但addCount失败，说明已经恢复完成，可以继续执行后面的函数
@@ -202,23 +224,78 @@ func (d *DHashChunkSystem) storeBytesLocally(key []byte, filename string, size i
 			return nil
 		}
 	}
+	err := d.local().StoreBytes(key, filename, size, v, extra)
+	if err != nil {
+		return err
+	}
 
-	return d.local().StoreBytes(key, filename, size, v, extra)
+	d.doReplicate(key)
+
+	return nil
 }
 
-func (d *DHashChunkSystem) storeReaderLocally(key []byte, filename string, size int64, reader io.Reader, extra *hashchunk.ExtraInfo) error {
+type warpCloserFn struct {
+	io.WriteCloser
+	close func()
+}
 
-	if d.recover.isRecovering(key) {
-		// 假如isRecovering为真，但addCount失败，说明已经恢复完成，可以继续执行后面的函数
-		if ok := d.recover.addCount(key); ok {
-			return nil
+func newWarpCloserFn(wc io.WriteCloser, close func()) io.WriteCloser {
+	return warpCloserFn{
+		WriteCloser: wc,
+		close:       close,
+	}
+}
+
+func (w warpCloserFn) Close() error {
+	err := w.WriteCloser.Close()
+	w.close()
+	return err
+}
+
+func (d *DHashChunkSystem) CreateChunkLocally(key []byte, name string, size int64, extra *hashchunk.ExtraInfo) (io.WriteCloser, error) {
+
+	if d.config.EnableReplica {
+		if d.recover.isRecovering(key) {
+			// 假如isRecovering为真，但addCount失败，说明已经恢复完成，可以继续执行后面的函数
+			if ok := d.recover.addCount(key); ok {
+				return nil, nil
+			}
 		}
 	}
 
-	return d.local().StoreReader(key, filename, size, reader, extra)
+	wc, err := d.local().CreateChunk(key, name, size, extra)
+	if err != nil {
+		return nil, err
+	}
+
+	wc = newWarpCloserFn(wc, func() {
+		d.doReplicate(key)
+	})
+
+	return wc, nil
 }
 
-func (d *DHashChunkSystem) deleteLocally(key []byte) error {
+func (d *DHashChunkSystem) StoreReaderLocally(key []byte, filename string, size int64, reader io.Reader, extra *hashchunk.ExtraInfo) error {
+
+	if d.config.EnableReplica {
+		if d.recover.isRecovering(key) {
+			// 假如isRecovering为真，但addCount失败，说明已经恢复完成，可以继续执行后面的函数
+			if ok := d.recover.addCount(key); ok {
+				return nil
+			}
+		}
+	}
+	err := d.local().StoreReader(key, filename, size, reader, extra)
+	if err != nil {
+		return err
+	}
+
+	d.doReplicate(key)
+
+	return nil
+}
+
+func (d *DHashChunkSystem) DeleteLocally(key []byte) error {
 
 	if d.recover.isRecovering(key) {
 		// 假如isRecovering为真，但minusCount失败，说明已经恢复完成，可以继续执行后面的函数
@@ -227,7 +304,17 @@ func (d *DHashChunkSystem) deleteLocally(key []byte) error {
 		}
 	}
 
-	return d.local().Delete(key)
+	info, err := d.local().GetInfo(key)
+	if err != nil {
+		return err
+	}
+
+	err = d.local().Delete(key)
+	if err != nil {
+		return err
+	}
+
+	return d.tryDeleteReplica(info)
 }
 
 func (d *DHashChunkSystem) Node() *node.Node {
@@ -236,8 +323,10 @@ func (d *DHashChunkSystem) Node() *node.Node {
 
 func (d *DHashChunkSystem) RecoverChunk(key []byte) (IDHashChunk, error) {
 	if !d.Config().EnableReplica {
-		return nil, hashchunk.ErrFileNotFound
+		return nil, hashchunk.ErrChunkNotFound
 	}
+
+	d.l.Info("Recover chunk", "key", hex.EncodeToString(key))
 
 	// 防止重复恢复Chunk
 	if ok := d.recover.registerChunk(key); !ok {
@@ -252,9 +341,15 @@ func (d *DHashChunkSystem) RecoverChunk(key []byte) (IDHashChunk, error) {
 	if err != nil {
 		return nil, err
 	}
+	d.l.Info("Found chunk", "chunk key", hex.EncodeToString(key))
 
 	//先存到本地
 	if err = func() error {
+		//清理残余Chunk Info
+		if err = d.local().DeleteInfo(key); err != nil {
+			return err
+		}
+
 		writer, err := d.local().CreateChunk(key, chunk.Info().ChunkInfo.ChunkName, chunk.Info().ChunkInfo.Size(), chunk.Info().ExtraInfo)
 		if err != nil {
 			return err
@@ -280,9 +375,8 @@ func (d *DHashChunkSystem) FindChunk(key []byte) (IDHashChunk, error) {
 
 	reader, replicaInfo, err := d.replicaService.RecoverReplica(key)
 	if err != nil {
-		return nil, err
+		return nil, util.WarpWithDetail(err)
 	}
-	defer reader.Close()
 
 	hashChunk := &hashchunk.HashChunk{
 		ReadSeekCloser: reader,
@@ -290,7 +384,7 @@ func (d *DHashChunkSystem) FindChunk(key []byte) (IDHashChunk, error) {
 
 	//chunk信息
 	chunkInfo := replicaInfo.Custom
-	replicaInfo.ClearCustom()
+	replicaInfo.Custom = nil
 
 	//还原包含chunk和replica信息的Info
 	info := hashchunk.NewInfo(chunkInfo, hashchunk.NewExtraInfo("replica", replicaInfo))
@@ -302,6 +396,66 @@ func (d *DHashChunkSystem) FindChunk(key []byte) (IDHashChunk, error) {
 	}, nil
 }
 
-func (d *DHashChunkSystem) Config() *hashchunk.Config {
-	return d.local().Config()
+func (d *DHashChunkSystem) doReplicate(key []byte) {
+	if d.config.EnableReplica {
+		go func() {
+			chunk, err := d.local().Get(key)
+			if err != nil {
+				d.l.Error("[Replica] get chunk failed", "error", err)
+			}
+			//后台执行副本存储
+			if err = d.replicaService.PutRelicaTask(key,
+				chunk,
+				chunk.Info().ChunkInfo,
+				func(res replica.TaskResult[*hashchunk.HashChunkInfo]) {
+					if res.Err != nil {
+						d.l.Error("Put replica task result", "error", res.Err)
+					}
+
+					//存储副本信息
+					if err := d.local().UpdateInfo(key, func(info *hashchunk.Info) {
+						info.ExtraInfo = hashchunk.NewExtraInfo("replica", res.ReplicaInfo)
+					}); err != nil {
+						d.l.Error("Update chunk info failed", "error", err)
+					}
+
+					chunk.Close()
+				}); err != nil {
+				d.l.Error("[Replica] Put replica task failed", "key", key, "error", err)
+			}
+		}()
+	}
+}
+
+func (d *DHashChunkSystem) tryDeleteReplica(info *hashchunk.Info) error {
+	// 如果chunk引用计数执行删除后为0，删除副本
+	if info.ChunkInfo.ChunkCount-1 == 0 {
+
+		replicaInfo, ok := info.ExtraInfo.TagInfo("replica")
+		if !ok {
+			return util.WarpWithDetail(replica.ErrReplicaInfoNotFound)
+		}
+
+		if replicaInfo == nil {
+			return util.WarpWithDetail(replica.ErrReplicaInfoNotFound)
+		}
+
+		replicaInfo.Custom = info.ChunkInfo
+		d.doDeleteReplica(replicaInfo)
+	}
+	return nil
+}
+
+func (d *DHashChunkSystem) doDeleteReplica(info *HashChunkReplicaInfo) {
+	if d.config.EnableReplica {
+		go func() {
+			if err := d.replicaService.DeleteReplica(info); err != nil {
+				d.l.Error("[Replica] Delete replica task failed", "error", err)
+			}
+		}()
+	}
+}
+
+func (d *DHashChunkSystem) Config() *DHCSConfig {
+	return d.config
 }

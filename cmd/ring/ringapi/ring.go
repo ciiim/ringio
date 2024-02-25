@@ -27,13 +27,14 @@ func init() {
 
 func InitRingAPI(flags *cli.Context) {
 	config := &ringio.RingConfig{
-		Name:         flags.String("hostname"),
-		Port:         flags.Int("port"),
-		Replica:      flags.Int("replica"),
-		ChunkMaxSize: ringio.DefaultChunkSize,
-		HashFn:       md5Hash,
-		RootPath:     flags.String("root"),
-		LogLevel:     slog.LevelInfo,
+		Name:          flags.String("hostname"),
+		Port:          flags.Int("port"),
+		Replica:       flags.Int("replica"),
+		ChunkMaxSize:  ringio.DefaultChunkSize,
+		HashFn:        md5Hash,
+		RootPath:      flags.String("root"),
+		LogLevel:      slog.LevelInfo,
+		EnableReplica: true, //FIXME: test
 	}
 
 	Ring = NewRingAPI(ringio.NewRing(config))
@@ -43,6 +44,6 @@ func InitRingAPI(flags *cli.Context) {
 func NewRingAPI(ring *ringio.Ring) *RingAPI {
 	return &RingAPI{
 		Ring:      ring,
-		chunkPool: chunkpool.NewChunkPool(ring.StorageSystem.Config().ChunkMaxSize),
+		chunkPool: chunkpool.NewChunkPool(ring.StorageSystem.Config().HCSConfig.ChunkMaxSize),
 	}
 }

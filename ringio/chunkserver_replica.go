@@ -3,6 +3,7 @@ package ringio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"time"
@@ -10,27 +11,41 @@ import (
 	"github.com/ciiim/cloudborad/replica"
 	"github.com/ciiim/cloudborad/ringio/fspb"
 	"github.com/ciiim/cloudborad/storage/hashchunk"
+	"github.com/ciiim/cloudborad/util"
 )
 
 // 直接存在本地
-func (r *rpcServer) PutReplica(stream fspb.HashChunkSystemService_PutReplicaServer) error {
+func (r *rpcServer) PutReplica(stream fspb.HashChunkSystemService_PutReplicaServer) (err error) {
+
+	defer func(err *error) {
+		if *err != nil {
+			fmt.Println(*err)
+		}
+	}(&err)
+
 	req, err := stream.Recv()
 	if err != nil {
-		return err
+		return util.WarpWithDetail(err)
 	}
 
 	replicaInfo := PBReplicaInfoToReplicaInfo(req.Info)
 	chunkInfo := replicaInfo.Custom
 	if chunkInfo == nil {
-		return errors.New("no chunk info")
+		return util.WarpWithDetail(errors.New("no chunk info"))
 	}
-	replicaInfo.ClearCustom()
+	replicaInfo.Custom = nil
 	//新建一个chunk
 	w, err := r.hcs.local().CreateChunk(chunkInfo.ChunkHash, chunkInfo.ChunkName, chunkInfo.ChunkSize, hashchunk.NewExtraInfo("replica", replicaInfo))
 	if err != nil {
-		stream.SendAndClose(&fspb.Error{Operation: "New Chunk", Err: err.Error()})
+		return util.WarpWithDetail(err)
+	}
+
+	// 有相同chunk的情况下，不需要再次写入
+	if err == nil && w == nil {
+		fmt.Printf("same chunk %x", replicaInfo.Key)
 		return nil
 	}
+
 	defer func() {
 		w.Close()
 	}()
@@ -40,15 +55,17 @@ func (r *rpcServer) PutReplica(stream fspb.HashChunkSystemService_PutReplicaServ
 			break
 		}
 		if err != nil {
-			stream.SendAndClose(&fspb.Error{Operation: "Receiving Chunk", Err: err.Error()})
-			return nil
+			return util.WarpWithDetail(err)
 		}
 		if _, err = w.Write(req.GetData()); err != nil {
-			stream.SendAndClose(&fspb.Error{Operation: "Writing Chunk", Err: err.Error()})
-			return nil
+			return util.WarpWithDetail(err)
 		}
 	}
-	stream.SendAndClose(&fspb.Error{})
+
+	if err = stream.SendAndClose(&fspb.Error{}); err != nil {
+		return util.WarpWithDetail(err)
+	}
+
 	return nil
 }
 
@@ -64,13 +81,9 @@ func (s *rpcServer) GetReplica(key *fspb.Key, stream fspb.HashChunkSystemService
 	if !ok {
 		return replica.ErrReplicaInfoNotFound
 	}
-	replicaInfoG, ok := replicaInfo.(*replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo])
-	if !ok {
-		return replica.ErrReplicaInfoNotFound
-	}
 
-	replicaInfoG.Set(chunk.Info().ChunkInfo)
-	pbInfo := ReplicaInfoToPBReplicaInfo(replicaInfoG)
+	replicaInfo.Set(chunk.Info().ChunkInfo)
+	pbInfo := ReplicaInfoToPBReplicaInfo(replicaInfo)
 
 	content := new(fspb.GetReplicaResponse)
 
@@ -132,7 +145,7 @@ func (s *rpcServer) DeleteReplica(ctx context.Context, key *fspb.Key) (*fspb.Err
 	deleted := make(chan struct{})
 	errCh := make(chan error)
 	go func() {
-		err := s.hcs.local().Delete(key.GetKey())
+		err := s.hcs.DeleteLocally(key.GetKey())
 		if err != nil {
 			errCh <- err
 			return
@@ -142,7 +155,7 @@ func (s *rpcServer) DeleteReplica(ctx context.Context, key *fspb.Key) (*fspb.Err
 
 	select {
 	case <-deleted:
-		return nil, nil
+		return &fspb.Error{}, nil
 	case <-ctx.Done():
 		return &fspb.Error{Operation: "Delete Replica", Err: ctx.Err().Error()}, nil
 	case <-time.After(_RPC_TIMEOUT):
@@ -182,20 +195,15 @@ func (s *rpcServer) CheckReplica(ctx context.Context, req *fspb.CheckReplicaRequ
 		if !ok {
 			return &fspb.Error{Operation: "Check Replica", Err: replica.ErrReplicaInfoNotFound.Error()}, nil
 		}
-		localReplicaInfoG, ok := localReplicaInfo.(*replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo])
-		if !ok {
-			return &fspb.Error{Operation: "Check Replica", Err: replica.ErrReplicaInfoNotFound.Error()}, nil
-		}
-
-		if localReplicaInfoG.Count() != remoteReplicaInfo.Count() {
+		if localReplicaInfo.Count() != remoteReplicaInfo.Count() {
 			return &fspb.Error{Operation: "Check Replica", Err: replica.ErrReplicaInfoCountMismatch.Error()}, nil
 		}
 
-		if !slices.Equal(localReplicaInfoG.All, remoteReplicaInfo.All) {
+		if !slices.Equal(localReplicaInfo.All, remoteReplicaInfo.All) {
 			return &fspb.Error{Operation: "Check Replica", Err: replica.ErrReplicaInfoAllNodesMismatch.Error()}, nil
 		}
 
-		if !slices.Equal(localReplicaInfoG.Checksum, remoteReplicaInfo.Checksum) {
+		if !slices.Equal(localReplicaInfo.Checksum, remoteReplicaInfo.Checksum) {
 			return &fspb.Error{Operation: "Check Replica", Err: replica.ErrReplicaInfoChecksumMismatch.Error()}, nil
 		}
 
@@ -224,27 +232,21 @@ func (s *rpcServer) UpdateReplicaInfo(ctx context.Context, remoteInfo *fspb.Repl
 			errCh <- &fspb.Error{Operation: "Update Replica Info", Err: replica.ErrReplicaInfoNotFound.Error()}
 			return
 		}
-		LocalreplicaInfoG, ok := replicaInfo.(*replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo])
-		if !ok {
-			errCh <- &fspb.Error{Operation: "Update Replica Info", Err: replica.ErrReplicaInfoNotFound.Error()}
-			return
-		}
-
 		remoteReplicaInfo := PBReplicaInfoToReplicaInfo(remoteInfo)
 
 		//校验key是否相同
-		if !slices.Equal(LocalreplicaInfoG.Key, remoteReplicaInfo.Key) {
+		if !slices.Equal(replicaInfo.Key, remoteReplicaInfo.Key) {
 			errCh <- &fspb.Error{Operation: "Update Replica Info", Err: replica.ErrReplicaInfoKeyMismatch.Error()}
 			return
 		}
 
 		//更新本地副本信息
 		info.ChunkInfo = remoteReplicaInfo.Custom
-		remoteReplicaInfo.ClearCustom()
+		remoteReplicaInfo.Custom = nil
 		info.ExtraInfo.Extra = remoteReplicaInfo
 
-		if err := s.hcs.local().UpdateInfo(LocalreplicaInfoG.Key, func(oldInfo *hashchunk.Info) {
-			oldInfo = info
+		if err := s.hcs.local().UpdateInfo(remoteReplicaInfo.Key, func(oldInfo *hashchunk.Info) {
+			*oldInfo = *info
 		}); err != nil {
 			errCh <- &fspb.Error{Operation: "Update Replica Info", Err: err.Error()}
 			return

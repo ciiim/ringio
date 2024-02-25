@@ -5,10 +5,10 @@ import (
 )
 
 var (
-	ErrFull              = errors.New("file system is full")
+	ErrFull              = errors.New("chunk system is full")
 	ErrChunkInfoNotFound = errors.New("chunk info not found")
-	ErrFileNotFound      = errors.New("file not found")
-	ErrFileExist         = errors.New("file or dir already exist")
+	ErrChunkNotFound     = errors.New("chunk not found")
+	ErrChunkExist        = errors.New("chunk already exist")
 	ErrFileInvalidName   = errors.New("invalid file name")
 	ErrNotDir            = errors.New("not a directory")
 	ErrIsDir             = errors.New("is a directory")

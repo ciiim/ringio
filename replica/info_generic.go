@@ -58,10 +58,6 @@ func (r *ReplicaObjectInfoG[T]) Count() int {
 	return r.ExpectedReplicaCount
 }
 
-func (r *ReplicaObjectInfoG[T]) ClearCustom() {
-	r.Custom = any(nil).(T)
-}
-
 // Sort 副本排序
 // 在第一位的副本为主副本
 func (r *ReplicaObjectInfoG[T]) Sort() {

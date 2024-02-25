@@ -15,6 +15,7 @@ type IHashChunkSystem interface {
 
 	GetInfo(key []byte) (*Info, error)
 	UpdateInfo(key []byte, updateFn func(info *Info)) error
+	DeleteInfo(key []byte) error
 
 	Cap() int64
 	Occupied(unit ...string) float64

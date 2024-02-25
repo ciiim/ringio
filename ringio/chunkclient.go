@@ -63,7 +63,7 @@ func warpTempFileReadSeekCloser(file *os.File) io.ReadSeekCloser {
 
 func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chunk *DHashChunk, err error) {
 	defer func(err *error) {
-		if *err != nil {
+		if *err != nil && *err != io.EOF {
 			*err = errors.New("remote get chunk: " + (*err).Error())
 		}
 	}(&err)
@@ -95,7 +95,7 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 		//不要defer关闭，接受完数据就seek到文件头，然后返回
 		defer func(err *error) {
 			// 如果err不为nil，说明在接受chunk数据时出现了错误，需要删除临时文件
-			if *err != nil {
+			if *err != nil && *err != io.EOF {
 				if cerr := chunkTempFile.Close(); cerr != nil {
 					*err = cerr
 				}
@@ -173,7 +173,7 @@ func (c *rpcHashClient) get(ctx context.Context, ni *node.Node, key []byte) (chu
 
 func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, size int64, chunkName string, reader io.Reader) (err error) {
 	defer func(err *error) {
-		if *err != nil {
+		if *err != nil && *err != io.EOF {
 			*err = errors.New("remote put chunk: " + (*err).Error())
 		}
 	}(&err)
@@ -237,8 +237,6 @@ func (c *rpcHashClient) put(ctx context.Context, ni *node.Node, key []byte, size
 	if transfered != int(size) {
 		return errors.New("transfered size not match")
 	}
-
-	println("transfered size: ", transfered)
 
 	resp, err := stream.CloseAndRecv()
 	if err != nil {

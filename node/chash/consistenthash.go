@@ -228,9 +228,10 @@ func (c *ConsistentHash) GetN(key []byte, n int) []CHashItem {
 
 	// 获取最接近的节点
 	index := sort.Search(len(c.hashRing), func(i int) bool { return c.hashRing[i] >= hash })
-	items := make([]CHashItem, n)
+	items := make([]CHashItem, 0, n)
 
-	items[0] = c.hashMap[c.hashRing[index%len(c.hashRing)]].(*innerItem).real
+	items = append(items, c.hashMap[c.hashRing[index%len(c.hashRing)]].(*innerItem).real)
+	c.findNMap[items[0].ID()] = items[0]
 
 	// 剩余需要遍历的节点数
 	remaining := len(c.hashRing) - 1
@@ -241,7 +242,7 @@ func (c *ConsistentHash) GetN(key []byte, n int) []CHashItem {
 		index++
 		remaining--
 	}() {
-		item := c.hashMap[c.hashRing[index%len(c.hashRing)]]
+		item := c.hashMap[c.hashRing[index%len(c.hashRing)]].(*innerItem).real
 
 		// 如果节点已经存在，则跳过
 		if compare(item, c.findNMap) {
@@ -249,7 +250,7 @@ func (c *ConsistentHash) GetN(key []byte, n int) []CHashItem {
 		}
 
 		// 添加节点
-		items[count] = item.(*innerItem).real
+		items = append(items, item)
 		c.findNMap[item.ID()] = item
 		count++
 	}

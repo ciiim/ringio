@@ -27,6 +27,10 @@ func NewNode(nodeAddr string, uniqueNodeName string) *Node {
 	}
 }
 
+func (n *Node) Copy() Node {
+	return *n
+}
+
 // return false if other is nil
 func (n Node) Equal(other *Node) bool {
 	if other == nil {

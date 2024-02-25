@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ciiim/cloudborad/node"
 	"github.com/ciiim/cloudborad/replica"
 	"github.com/ciiim/cloudborad/ringio/fspb"
 	"github.com/ciiim/cloudborad/storage/hashchunk"
@@ -97,10 +98,6 @@ func (r *recoveringChunk) minusCount(key []byte) (ok bool) {
 	return true
 }
 
-var (
-	ErrSelfNode = errors.New("self node")
-)
-
 func (d *DHashChunkSystem) setReplicaFunctions() {
 	d.replicaService.SetFunctions(d.putReplica, d.getReplica, d.delReplica, d.checkReplica, d.updateReplicaInfo)
 }
@@ -110,21 +107,19 @@ func (d *DHashChunkSystem) putReplica(
 	reader io.Reader,
 	info *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo],
 ) error {
-	node := d.ns.GetByNodeID(nodeID)
-	if node == nil {
+	n := d.ns.GetByNodeID(nodeID)
+	if n == nil {
 		return replica.ErrNoReplicaNode
 	}
 
-	if node.Equal(d.ns.Self()) {
-		return ErrSelfNode
+	if n.Equal(d.ns.Self()) {
+		return node.ErrSelfNode
 	}
 
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
 
-	chunkInfo := info.Custom
-
-	return d.remote.putReplica(ctx, node, reader, chunkInfo, info)
+	return d.remote.putReplica(ctx, n, reader, info)
 
 }
 
@@ -132,57 +127,57 @@ func (d *DHashChunkSystem) getReplica(
 	nodeID string,
 	key []byte,
 ) (io.ReadSeekCloser, *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo], error) {
-	node := d.ns.GetByNodeID(nodeID)
-	if node == nil {
+	n := d.ns.GetByNodeID(nodeID)
+	if n == nil {
 		return nil, nil, replica.ErrNoReplicaNode
 	}
 
-	if node.Equal(d.ns.Self()) {
-		return nil, nil, ErrSelfNode
+	if n.Equal(d.ns.Self()) {
+		return nil, nil, node.ErrSelfNode
 	}
 
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
 
-	return d.remote.getReplica(ctx, node, &fspb.Key{Key: key})
+	return d.remote.getReplica(ctx, n, &fspb.Key{Key: key})
 }
 
 func (d *DHashChunkSystem) delReplica(
 	nodeID string,
 	key []byte,
 ) error {
-	node := d.ns.GetByNodeID(nodeID)
-	if node == nil {
+	n := d.ns.GetByNodeID(nodeID)
+	if n == nil {
 		return replica.ErrNoReplicaNode
 	}
 
-	if node.Equal(d.ns.Self()) {
-		return ErrSelfNode
+	if n.Equal(d.ns.Self()) {
+		return node.ErrSelfNode
 	}
 
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
 
-	return d.remote.delReplica(ctx, node, &fspb.Key{Key: key})
+	return d.remote.delReplica(ctx, n, &fspb.Key{Key: key})
 }
 
 func (d *DHashChunkSystem) checkReplica(
 	nodeID string,
 	info *replica.ReplicaObjectInfoG[*hashchunk.HashChunkInfo],
 ) error {
-	node := d.ns.GetByNodeID(nodeID)
-	if node == nil {
+	n := d.ns.GetByNodeID(nodeID)
+	if n == nil {
 		return replica.ErrNoReplicaNode
 	}
 
-	if node.Equal(d.ns.Self()) {
-		return ErrSelfNode
+	if n.Equal(d.ns.Self()) {
+		return node.ErrSelfNode
 	}
 
 	ctx, cancel := ctxWithTimeout()
 	defer cancel()
 
-	return d.remote.checkReplica(ctx, node, info)
+	return d.remote.checkReplica(ctx, n, info)
 }
 
 func (d *DHashChunkSystem) updateReplicaInfo(

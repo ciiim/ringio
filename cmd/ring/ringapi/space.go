@@ -76,7 +76,7 @@ func (r *RingAPI) SpaceWithDir(space string, base, dir string) (*UserDir, error)
 
 func (r *RingAPI) PutFile(space, base, name string, fileHash []byte, fileSize int64, file multipart.File) error {
 	base = handleBaseDir(base)
-	chunkMaxSize := r.StorageSystem.Config().ChunkMaxSize
+	chunkMaxSize := r.StorageSystem.Config().HCSConfig.ChunkMaxSize
 	if fileSize > chunkMaxSize {
 		return r.putFileSplit(space, base, name, chunkMaxSize, fileHash, fileSize, file)
 	}
@@ -134,7 +134,7 @@ func (r *RingAPI) putFileSplit(space, base, name string, chunkSize int64, fileHa
 			}
 			chunks[i] = tree.NewFileChunk(
 				chunkReader.Size(),
-				chunkBuffer.Hash(r.StorageSystem.Config().HashFn),
+				chunkBuffer.Hash(r.StorageSystem.Config().HCSConfig.HashFn),
 			)
 			if _, err := chunkReaders[i].Seek(0, io.SeekStart); err != nil {
 				return err
@@ -242,6 +242,7 @@ func (r *RingAPI) DeleteFile(space, base, name string) error {
 		if err := r.StorageSystem.Delete(v.Hash); err != nil {
 			return err
 		}
+		fmt.Printf("DeleteChunk: %v\n", hex.EncodeToString(v.Hash))
 	}
 
 	return r.FrontSystem.DeleteMetadata(space, base, name)

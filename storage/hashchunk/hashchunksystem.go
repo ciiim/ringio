@@ -104,11 +104,13 @@ func (hcs *HashChunkSystem) CreateChunk(key []byte, chunkName string, size int64
 	// if chunk is not exist, create chunk info and store it
 	_, err := hcs.increaseChunkCounter(key)
 	if err == nil {
-		return nil, fmt.Errorf("chunk is exist")
+		return nil, nil
 	}
-	if err != nil && err != ErrChunkInfoNotFound {
+	if err != nil && err != ErrChunkInfoNotFound && err != ErrChunkNotFound {
 		return nil, err
 	}
+
+	fmt.Printf("CreateChunk: key: %x, chunkName: %s, size: %d\n", key, chunkName, size)
 
 	hci := NewChunkInfo(chunkName, key, size)
 	hci.SetPath(filepath.Join(hcs.config.RootPath, hcs.config.CalcStoragePathFn(hci)))
@@ -267,7 +269,7 @@ func (hcs *HashChunkSystem) Delete(key []byte) error {
 	// if hcs.occupied.Load()-info.ChunkInfo.ChunkSize < 0 {
 	// 	return fmt.Errorf("[Delete Chunk Error] Occupied is 0")
 	// }
-	if err := hcs.deleteChunkStat(key); err != nil {
+	if err := hcs.DeleteInfo(key); err != nil {
 		return err
 	}
 	if err := hcs.deleteChunk(info); err != nil {
@@ -339,13 +341,13 @@ func (hcs *HashChunkSystem) Occupied(unit ...string) float64 {
 	}
 }
 
-func (hcs *HashChunkSystem) createChunkWriter(hcStat *HashChunkInfo) (io.WriteCloser, error) {
+func (hcs *HashChunkSystem) createChunkWriter(chunkInfo *HashChunkInfo) (io.WriteCloser, error) {
 	if hcs.config.CalcStoragePathFn == nil {
 		return nil, fmt.Errorf("CalcChunkStoragePathFn is nil")
 	}
-	chunkFile, err := os.Create(filepath.Join(hcStat.ChunkPath, hcStat.ChunkName))
+	chunkFile, err := os.Create(filepath.Join(chunkInfo.ChunkPath, chunkInfo.ChunkName))
 	if err != nil {
-		return nil, fmt.Errorf("open file %s error: %s", hcStat.ChunkPath+"/"+hcStat.ChunkName, err)
+		return nil, fmt.Errorf("open file %s error: %w", chunkInfo.ChunkPath+"/"+chunkInfo.ChunkName, err)
 	}
 	chunkwc := warpHashChunkWriteCloser(chunkFile)
 	return chunkwc, nil
@@ -377,8 +379,8 @@ func (hcs *HashChunkSystem) storeChunkReader(key *HashChunkInfo, reader io.Reade
 func (hcs *HashChunkSystem) getChunk(info *Info) (io.ReadSeekCloser, error) {
 	file, err := os.Open(filepath.Join(info.ChunkInfo.ChunkPath, info.ChunkInfo.ChunkName))
 	if err != nil {
-		if err == os.ErrNotExist {
-			return nil, ErrFileNotFound
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrChunkNotFound
 		}
 		return nil, err
 	}
@@ -409,11 +411,12 @@ func (hcs *HashChunkSystem) storeInfo(hashSum []byte, info *Info) error {
 	if err != nil {
 		return err
 	}
+
 	err = hcs.levelDB.Put(hashSum, res, nil)
 	return err
 }
 
-func (hcs *HashChunkSystem) deleteChunkStat(hashSum []byte) error {
+func (hcs *HashChunkSystem) DeleteInfo(hashSum []byte) error {
 	return hcs.levelDB.Delete(hashSum, nil)
 }
 
@@ -423,6 +426,14 @@ func (hcs *HashChunkSystem) increaseChunkCounter(key []byte) (nowCounter int64, 
 	if err != nil {
 		return 0, err
 	}
+
+	//检查chunk是否存在
+	if _, err = os.Stat(filepath.Join(info.ChunkInfo.ChunkPath, info.ChunkInfo.ChunkName)); err != nil {
+		if os.IsNotExist(err) {
+			return 0, ErrChunkNotFound
+		}
+	}
+
 	info.ChunkInfo.ChunkCount++
 
 	// store chunk info

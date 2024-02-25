@@ -41,12 +41,15 @@ func NewRing(config *RingConfig) *Ring {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: config.LogLevel}))
 
 	storageSystem := NewDHCS(
-		&hashchunk.Config{
-			RootPath:          filepath.Join(config.RootPath, "ds"),
-			Capacity:          -1,
-			ChunkMaxSize:      config.ChunkMaxSize,
-			HashFn:            config.HashFn,
-			CalcStoragePathFn: nil,
+		&DHCSConfig{
+			HCSConfig: &hashchunk.Config{
+				RootPath:          filepath.Join(config.RootPath, "ds"),
+				Capacity:          -1,
+				ChunkMaxSize:      config.ChunkMaxSize,
+				HashFn:            config.HashFn,
+				CalcStoragePathFn: nil,
+			},
+			EnableReplica: config.EnableReplica,
 		},
 		node.NodeServiceRO(),
 		logger,

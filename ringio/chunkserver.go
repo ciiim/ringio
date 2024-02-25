@@ -9,7 +9,7 @@ import (
 )
 
 func (r *rpcServer) Get(key *fspb.Key, stream fspb.HashChunkSystemService_GetServer) error {
-	chunk, err := r.hcs.local().Get(key.Key)
+	chunk, err := r.hcs.GetLocally(key.Key)
 	if err != nil {
 		_ = stream.Send(&fspb.GetResponse{
 			Error: &fspb.Error{Operation: "Get Chunk", Err: err.Error()},
@@ -72,20 +72,26 @@ func (r *rpcServer) Get(key *fspb.Key, stream fspb.HashChunkSystemService_GetSer
 
 func (r *rpcServer) Put(stream fspb.HashChunkSystemService_PutServer) (err error) {
 	defer func(err *error) {
-		if *err != nil {
+		if *err != nil && *err != io.EOF {
 			fmt.Printf("remote put chunk: %s\n", (*err).Error())
 		}
 	}(&err)
 
-	request := &fspb.PutRequest{}
-	if err := stream.RecvMsg(request); err != nil {
-		return err
-	}
-	//新建一个chunk，还没生成副本，所以不需要replicaInfo
-	w, err := r.hcs.local().CreateChunk(request.Key.GetKey(), request.GetChunkName(), request.GetChunkSize(), nil)
+	request, err := stream.Recv()
 	if err != nil {
 		return err
 	}
+	//新建一个chunk，还没生成副本，所以不需要replicaInfo
+	w, err := r.hcs.CreateChunkLocally(request.Key.GetKey(), request.GetChunkName(), request.GetChunkSize(), nil)
+	if err != nil {
+		return err
+	}
+
+	// 有相同chunk的情况下，不需要再次写入
+	if err == nil && w == nil {
+		return nil
+	}
+
 	defer func() {
 		w.Close()
 	}()
@@ -121,7 +127,7 @@ func (r *rpcServer) Delete(ctx context.Context, key *fspb.Key) (resp *fspb.Error
 		}
 	}(&err)
 
-	if err := r.hcs.local().Delete(key.Key); err != nil {
+	if err := r.hcs.DeleteLocally(key.Key); err != nil {
 		return &fspb.Error{Err: err.Error()}, nil
 	}
 	return &fspb.Error{}, nil

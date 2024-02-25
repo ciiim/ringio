@@ -7,6 +7,7 @@ toolchain go1.21.4
 require (
 	github.com/ciiim/syncmember v0.0.0-20240130134858-f89825b2d7c7
 	github.com/gin-gonic/gin v1.9.1
+	github.com/panjf2000/ants v1.3.0
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/urfave/cli/v2 v2.25.7
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63

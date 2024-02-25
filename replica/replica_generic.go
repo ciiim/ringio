@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/ciiim/cloudborad/node"
+	"github.com/ciiim/cloudborad/util"
+	"github.com/panjf2000/ants"
 )
 
 var (
@@ -23,9 +25,16 @@ type CustomType interface {
 	any
 }
 
+type TaskResult[T CustomType] struct {
+	Err         error
+	ReplicaInfo *ReplicaObjectInfoG[T]
+}
+
 type ReplicaServiceG[T CustomType] struct {
 	count int // 副本数
 	ns    *node.NodeServiceRO
+
+	taskPool *ants.Pool
 
 	putReplica func(nodeID string, reader io.Reader, info *ReplicaObjectInfoG[T]) error
 	getReplica func(nodeID string, key []byte) (io.ReadSeekCloser, *ReplicaObjectInfoG[T], error)
@@ -38,9 +47,11 @@ type ReplicaServiceG[T CustomType] struct {
 }
 
 func NewG[T CustomType](count int, ns *node.NodeServiceRO) *ReplicaServiceG[T] {
+	pool, _ := ants.NewPool(5, ants.WithOptions(ants.Options{Nonblocking: true}))
 	return &ReplicaServiceG[T]{
-		count: count,
-		ns:    ns,
+		count:    count,
+		ns:       ns,
+		taskPool: pool,
 	}
 }
 
@@ -89,10 +100,17 @@ func (r *ReplicaServiceG[T]) CheckReplica(nodeID string, info *ReplicaObjectInfo
 	return r.checkReplica(nodeID, info)
 }
 
+func (r *ReplicaServiceG[T]) PutRelicaTask(key []byte, local io.ReadSeeker, extraInfo T, endFn func(taskResult TaskResult[T])) error {
+	return r.taskPool.Submit(func() {
+		info, err := r.PutReplica(key, local, extraInfo)
+		endFn(TaskResult[T]{Err: err, ReplicaInfo: info})
+	})
+}
+
 // 执行副本存储操作
 // 必须在主副本节点上执行
 // 建议放在后台队列执行
-func (r *ReplicaServiceG[T]) PutReplica(key []byte, local io.ReadSeeker) (*ReplicaObjectInfoG[T], error) {
+func (r *ReplicaServiceG[T]) PutReplica(key []byte, local io.ReadSeeker, extraInfo T) (*ReplicaObjectInfoG[T], error) {
 	if r.putReplica == nil {
 		return nil, ErrNoFunction
 	}
@@ -103,11 +121,6 @@ func (r *ReplicaServiceG[T]) PutReplica(key []byte, local io.ReadSeeker) (*Repli
 		return nil, ErrNoReplicaNode
 	}
 
-	// 不足副本所需的节点
-	if len(nodes) < r.count {
-		return nil, nil
-	}
-
 	nodeIDs := make([]string, 0, len(nodes))
 	for _, node := range nodes {
 		nodeIDs = append(nodeIDs, node.ID())
@@ -115,6 +128,8 @@ func (r *ReplicaServiceG[T]) PutReplica(key []byte, local io.ReadSeeker) (*Repli
 
 	// 生成副本信息
 	remoteInfo := NewReplicaObjectInfoG[T](key, r.count, nodeIDs...)
+
+	remoteInfo.Custom = extraInfo
 
 	// nodes[0] 为主副本
 	// 从1开始为副本节点
@@ -183,22 +198,22 @@ func (r *ReplicaServiceG[T]) GetReplica(key []byte) (reader io.ReadSeekCloser, i
 */
 func (r *ReplicaServiceG[T]) RecoverReplica(key []byte) (reader io.ReadSeekCloser, info *ReplicaObjectInfoG[T], err error) {
 	if r.getReplica == nil {
-		return nil, nil, ErrNoFunction
+		return nil, nil, util.WarpWithDetail(ErrNoFunction)
 	}
 
 	nodes := r.ns.PickN(key, r.count)
 	if len(nodes) == 0 {
-		return nil, nil, ErrNoReplicaNode
+		return nil, nil, util.WarpWithDetail(ErrNoReplicaNode)
 	}
 
 	defer func() {
-		if err == nil {
-			// 移除冗余副本
-			// 先进行副本健康检查，确定总副本数量，然后删除多余的副本
-			go func() {
-				_, _ = r.CheckAndAdjustReplica(info)
-			}()
-		}
+		// if err == nil {
+		// 	// 移除冗余副本
+		// 	// 先进行副本健康检查，确定总副本数量，然后删除多余的副本
+		// 	go func() {
+		// 		_, _ = r.CheckAndAdjustReplica(info)
+		// 	}()
+		// }
 	}()
 
 	// 从副本节点恢复数据
@@ -226,8 +241,12 @@ func (r *ReplicaServiceG[T]) DeleteReplica(info *ReplicaObjectInfoG[T]) error {
 	}
 
 	// 依次删除副本节点数据
-	for _, node := range nodes {
-		if err := r.delReplica(node.ID(), info.Key); err != nil {
+	for _, n := range nodes {
+		err := r.delReplica(n.ID(), info.Key)
+		if err == node.ErrSelfNode {
+			continue
+		}
+		if err != nil {
 			return err
 		}
 	}

@@ -13,13 +13,23 @@ type IDHashChunk interface {
 }
 
 type IDHashChunkSystem interface {
+
+	// 本地入口方法
+	//
+	// 可绕过副本服务
 	local() hashchunk.IHashChunkSystem
 
-	Config() *hashchunk.Config
+	Config() *DHCSConfig
 
 	Get(key []byte) (IDHashChunk, error)
 
+	GetLocally(key []byte) (IDHashChunk, error)
+
 	Delete(key []byte) error
+
+	DeleteLocally(key []byte) error
+
+	CreateChunkLocally(key []byte, name string, size int64, extra *hashchunk.ExtraInfo) (io.WriteCloser, error)
 
 	StoreReader(key []byte, name string, size int64, reader io.Reader, extra *hashchunk.ExtraInfo) error
 

@@ -2,6 +2,8 @@ package hashchunk
 
 import (
 	"time"
+
+	"github.com/ciiim/cloudborad/replica"
 )
 
 type Info struct {
@@ -10,8 +12,8 @@ type Info struct {
 }
 
 type ExtraInfo struct {
-	Tag   string `json:"tag"`
-	Extra any    `json:"extra"`
+	Tag   string                                      `json:"tag"`
+	Extra *replica.ReplicaObjectInfoG[*HashChunkInfo] `json:"extra"`
 }
 
 type HashChunkInfo struct {
@@ -34,7 +36,7 @@ func NewInfo(chunkInfo *HashChunkInfo, extraInfo *ExtraInfo) *Info {
 	}
 }
 
-func NewExtraInfo(tag string, extra any) *ExtraInfo {
+func NewExtraInfo(tag string, extra *replica.ReplicaObjectInfoG[*HashChunkInfo]) *ExtraInfo {
 	return &ExtraInfo{
 		Tag:   tag,
 		Extra: extra,
@@ -87,7 +89,7 @@ func (hcstat *HashChunkInfo) CreateTime() time.Time {
 	return hcstat.ChunkCreateTime
 }
 
-func (e *ExtraInfo) TagInfo(tag string) (any, bool) {
+func (e *ExtraInfo) TagInfo(tag string) (*replica.ReplicaObjectInfoG[*HashChunkInfo], bool) {
 	if e.Tag == tag {
 		return e.Extra, true
 	}
