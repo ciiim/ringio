@@ -19,49 +19,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.20'
-
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-        
-    - name: Install Protoc-gen-go
-      run: go install github.com/golang/protobuf/protoc-gen-go/
-      
-    - name: Install Protoc-gen-go-grpc
-      run: go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
-
-    - name: generate protobuf code
-      run: sh genprotobuf.sh
+        go-version: '1.21'
     
     - name: Build
       run: CGO_ENABLED=0 go build -o cloud_board
 
-    - name: SCP Files0
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.REMOTE_SERVER_0 }}
-        username: ${{ secrets.REMOTE_SERVER_USER }} 
-        port: ${{ secrets.REMOTE_SERVER_PORT }}
-        key: ${{ secrets.SERVER_SSH_KEY }} 
-        source: 'cloud_board'
-        target: ${{ secrets.REMOTE_SERVER_PATH }}
-
-    - name: SCP Files1
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.REMOTE_SERVER_1 }}
-        username: ${{ secrets.REMOTE_SERVER_USER }} 
-        port: ${{ secrets.REMOTE_SERVER_PORT }}
-        key: ${{ secrets.SERVER_SSH_KEY }} 
-        source: 'cloud_board' 
-        target: ${{ secrets.REMOTE_SERVER_PATH }}
-
-    - name: SCP Files2
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.REMOTE_SERVER_2 }}
-        username: ${{ secrets.REMOTE_SERVER_USER }} 
-        port: ${{ secrets.REMOTE_SERVER_PORT }}
-        key: ${{ secrets.SERVER_SSH_KEY }} 
-        source: 'cloud_board'
-        target: ${{ secrets.REMOTE_SERVER_PATH }}
+    - name: Test
+      run: go test -v
